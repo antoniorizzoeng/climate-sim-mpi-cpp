@@ -1,0 +1,41 @@
+# CMake / build artifacts
+/build/
+/cmake-build-*/
+/CMakeFiles/
+/Testing/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+*.cmake
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# Editors/IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
