@@ -15,6 +15,10 @@ add_library(test_common INTERFACE)
 target_include_directories(test_common INTERFACE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
 
+add_executable(test_config test_config.cpp)
+target_link_libraries(test_config PRIVATE gtest_main core yaml-cpp)
+add_test(NAME config_suite COMMAND test_config)
+
 add_executable(test_field test_field.cpp)
 target_link_libraries(test_field PRIVATE test_common core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_field)
