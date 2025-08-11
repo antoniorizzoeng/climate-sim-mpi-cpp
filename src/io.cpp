@@ -5,6 +5,8 @@
 #include <cctype>
 #include <stdexcept>
 #include <algorithm>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 static std::string lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){return std::tolower(c);});
@@ -197,4 +199,29 @@ void write_field_csv(const Field& f, const std::string& filename) {
         }
         ofs << "\n";
     }
+}
+
+void write_rank_layout_csv(const std::string& path,
+                           int rank, int nx_global, int ny_global,
+                           int x_offset, int y_offset, int nx_local, int ny_local, int halo)
+{
+    const bool exists = fs::exists(path);
+    fs::path p(path);
+    if (!p.parent_path().empty())
+        fs::create_directories(p.parent_path());
+    std::ofstream ofs(path, std::ios::app);
+    if (!ofs) throw std::runtime_error("Failed to open rank layout file: " + path);
+    if (!exists) {
+        ofs << "rank,x_offset,y_offset,nx_local,ny_local,halo,nx_global,ny_global\n";
+    }
+    ofs << rank << "," << x_offset << "," << y_offset << ","
+        << nx_local << "," << ny_local << "," << halo << ","
+        << nx_global << "," << ny_global << "\n";
+}
+
+std::string snapshot_filename(const std::string& outdir, int step, int rank) {
+    fs::create_directories(outdir);
+    char buf[256];
+    std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.csv", step, rank);
+    return (fs::path(outdir) / buf).string();
 }

@@ -40,5 +40,6 @@ __pycache__/
 # Logs
 *.log
 
-# Benchmark results
-bench/results/
+# Simulation artifacts
+/outputs/
+/bench/results/

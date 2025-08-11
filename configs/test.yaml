@@ -1,0 +1,5 @@
+grid:    { nx: 16, ny: 20, dx: 1.0, dy: 1.0 }
+physics: { D: 0.01, vx: 0.0, vy: 0.0 }
+time:    { dt: 0.1, steps: 10, out_every: 5 }
+bc: periodic
+output:  { prefix: "test" }

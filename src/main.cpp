@@ -4,11 +4,15 @@
 #include <string>
 #include <optional>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+namespace fs = std::filesystem;
 
 #include "io.hpp"
 #include "field.hpp"
 #include "decomp.hpp"
 #include "boundary.hpp"
+#include "stability.hpp"
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
@@ -26,6 +30,17 @@ int main(int argc, char** argv) {
     }
 
     SimConfig cfg = merged_config(cfg_path, args);
+
+    double dt_limit = safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
+    double dt_eff = cfg.dt;
+    if (dt_eff > dt_limit) {
+        if (world_rank == 0) {
+            std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit "
+                    << dt_limit << " -> clamping to dt=" << dt_limit << "\n";
+        }
+        dt_eff = dt_limit;
+    }
+    cfg.dt = dt_eff;
 
     if (world_rank == 0) {
         std::cout << "climate-sim-mpi-cpp \n"
@@ -46,9 +61,22 @@ int main(int argc, char** argv) {
     u.fill(0.0);
     tmp.fill(0.0);
 
-    //write_rank_layout_csv("outputs/rank_layout.csv", //TODO
-    //                      world_rank, cfg.nx, cfg.ny,
-    //                      dec.x_offset, dec.y_offset, dec.nx_local, dec.ny_local, halo);
+    if (world_rank == 0) {
+        std::filesystem::create_directories("outputs");
+        {
+            std::ofstream ofs("outputs/rank_layout.csv", std::ios::app);
+            if (!ofs) throw std::runtime_error("Failed to open outputs/rank_layout.csv");
+            if (ofs.tellp() == 0) {
+                ofs << "rank,x_offset,y_offset,nx_local,ny_local,halo,nx_global,ny_global\n";
+            }
+        }
+        std::filesystem::create_directories("outputs/snapshots");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    write_rank_layout_csv("outputs/rank_layout.csv",
+                          world_rank, cfg.nx, cfg.ny,
+                          dec.x_offset, dec.y_offset, dec.nx_local, dec.ny_local, halo);
 
     MPI_Barrier(MPI_COMM_WORLD);
     double t0 = MPI_Wtime();
@@ -57,6 +85,10 @@ int main(int argc, char** argv) {
     for (int n = 0; n < cfg.steps; ++n) {
         double ts = MPI_Wtime();
 
+        if (n % cfg.out_every == 0) {
+            auto fname = snapshot_filename("outputs/snapshots", n, world_rank);
+            write_field_csv(u, fname);
+        }
         // exchange_halos(u);              // TODO 
         // apply_boundary_conditions(u);   // TODO 
         // compute_diffusion(u, tmp, cfg); // TODO 

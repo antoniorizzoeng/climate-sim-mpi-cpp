@@ -94,6 +94,7 @@ Sum over all ranks:
   nx \approx \frac{Nx}{\sqrt{p}},\quad ny \approx \frac{Ny}{\sqrt{p}} \Rightarrow V_{\mathrm{halo}} \propto \frac{Nx + Ny}{\sqrt{p}}
   ```
 - Efficiency drops when comm + latency + sync dominate compute. Expect a knee where local tiles become too small.
+- Benchmark scripts will generate also Karp-Flatt metric as well as speedup and efficiency
 
 ### Weak scaling (fixed `nx × ny` per rank, increase `p`)
 
@@ -171,9 +172,3 @@ T_{\mathrm{step}} \approx \max\left[ (c_d + c_a)\,nx\,ny,\ \ 4\alpha + \beta\,V_
   ```
 
 ---
-
-**Files/Structure (proposed):**
-- `bench/bench_exchange.cpp` — microbenchmark for halo+compute
-- `bench/CMakeLists.txt` — optional; or build via `src/CMakeLists.txt`
-- `scripts/run_benchmarks.sh` — loops through strong/weak suites, writes CSV
-- `docs/computational_analysis.md` — this document
