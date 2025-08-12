@@ -21,6 +21,10 @@ add_test(NAME config_suite COMMAND test_config)
 
 target_compile_definitions(test_config PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/configs")
 
+add_executable(test_halo test_halo.cpp)
+target_link_libraries(test_halo PRIVATE core gtest_main MPI::MPI_CXX)
+add_test(NAME halo_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:test_halo> ${MPIEXEC_POSTFLAGS})
+
 add_executable(test_field test_field.cpp)
 target_link_libraries(test_field PRIVATE test_common core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_field)
@@ -38,3 +42,7 @@ target_link_libraries(test_decomp_mpi PRIVATE test_common core GTest::gtest)
 add_test(NAME decomp_mpi
   COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
           $<TARGET_FILE:test_decomp_mpi>)
+
+add_executable(test_boundary test_boundary.cpp)
+target_link_libraries(test_boundary PRIVATE core gtest_main MPI::MPI_CXX)
+add_test(NAME boundary_single_rank COMMAND $<TARGET_FILE:test_boundary>)

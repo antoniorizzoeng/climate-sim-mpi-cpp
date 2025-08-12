@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
             write_field_csv(u, fname);
         }
         // exchange_halos(u);              // TODO 
-        // apply_boundary_conditions(u);   // TODO 
+        // apply_boundary(u);              // TODO 
         // compute_diffusion(u, tmp, cfg); // TODO 
         // compute_advection(u, tmp, cfg); // TODO 
         // std::swap(u.data, tmp.data);

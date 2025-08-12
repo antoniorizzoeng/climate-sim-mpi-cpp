@@ -16,7 +16,7 @@ This document derives **compute**, **communication**, **memory**, and **I/O** co
 ```
 for n in 0..steps-1:
   exchange_halos(u)
-  apply_boundary_conditions(u)
+  apply_boundary(u)
   compute_diffusion(u, tmp)
   compute_advection(u, tmp)
   swap(u, tmp)

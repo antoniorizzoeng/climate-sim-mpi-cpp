@@ -1,4 +1,4 @@
-grid:    { nx: 512, ny: 512, dx: 1.0, dy: 1.0 }
+lgrid:    { nx: 512, ny: 512, dx: 1.0, dy: 1.0 }
 physics: { D: 0.05, vx: 0.5, vy: 0.0 }
 time:    { dt: 0.1, steps: 1000, out_every: 100 }
 bc: periodic

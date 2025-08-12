@@ -5,6 +5,7 @@ add_library(core
     advection.cpp
     boundary.cpp
     io.cpp
+    halo.cpp
 )
 
 target_include_directories(core PUBLIC ${CMAKE_SOURCE_DIR}/include)
