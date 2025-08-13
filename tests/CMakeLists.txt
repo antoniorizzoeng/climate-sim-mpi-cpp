@@ -7,6 +7,13 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+if(DEFINED ENV{GITHUB_ACTIONS})
+  set(MPI_TEST_PROCS 2)
+else()
+  set(MPI_TEST_PROCS 4)
+endif()
+
+
 include(CTest)
 enable_testing()
 include(GoogleTest)
@@ -23,7 +30,9 @@ target_compile_definitions(test_config PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/
 
 add_executable(test_halo test_halo.cpp)
 target_link_libraries(test_halo PRIVATE core gtest_main MPI::MPI_CXX)
-add_test(NAME halo_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:test_halo> ${MPIEXEC_POSTFLAGS})
+add_test(NAME halo_mpi
+  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
+          $<TARGET_FILE:test_halo>)
 
 add_executable(test_field test_field.cpp)
 target_link_libraries(test_field PRIVATE test_common core GTest::gtest GTest::gtest_main)
@@ -38,9 +47,9 @@ target_link_libraries(test_stability PRIVATE core gtest_main)
 add_test(NAME stability COMMAND test_stability)
 
 add_executable(test_decomp_mpi test_decomp_mpi.cpp)
-target_link_libraries(test_decomp_mpi PRIVATE test_common core GTest::gtest)
+target_link_libraries(test_decomp_mpi PRIVATE core gtest_main MPI::MPI_CXX)
 add_test(NAME decomp_mpi
-  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
+  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
           $<TARGET_FILE:test_decomp_mpi>)
 
 add_executable(test_boundary test_boundary.cpp)
