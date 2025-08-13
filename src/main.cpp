@@ -89,8 +89,8 @@ int main(int argc, char** argv) {
             auto fname = snapshot_filename("outputs/snapshots", n, world_rank);
             write_field_csv(u, fname);
         }
-        // exchange_halos(u);              // TODO 
-        // apply_boundary(u);              // TODO 
+        // exchange_halos(u);
+        // apply_boundary(u);
         // compute_diffusion(u, tmp, cfg); // TODO 
         // compute_advection(u, tmp, cfg); // TODO 
         // std::swap(u.data, tmp.data);

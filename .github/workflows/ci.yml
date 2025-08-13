@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps (OpenMPI, yaml-cpp, tools)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ make \
+            libopenmpi-dev openmpi-bin \
+            libyaml-cpp-dev \
+            bc
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DBUILD_TESTING=ON -DBUILD_BENCH=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests (ctest)
+        env:
+          OMPI_MCA_btl: "self,tcp"
+        run: |
+          ctest --test-dir build --output-on-failure
+
+      - name: Archive outputs (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+            name: build-logs-and-results
+            path: |
+              build/Testing/**/*
+              bench/results/*.csv
+            if-no-files-found: ignore
