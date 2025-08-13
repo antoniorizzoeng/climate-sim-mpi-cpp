@@ -5,6 +5,7 @@ FetchContent_Declare(
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(MPIEXEC_PREFLAGS "${MPIEXEC_PREFLAGS} --oversubscribe")
 FetchContent_MakeAvailable(googletest)
 
 include(CTest)
