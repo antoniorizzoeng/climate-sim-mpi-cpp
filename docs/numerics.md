@@ -1,6 +1,7 @@
 ---
 layout: default
 ---
+{% include mathjax.html %}
 
 # Numerics
 
