@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include "stability.hpp"
 
 TEST(StabilityTest, ReturnsPositiveLimit) {

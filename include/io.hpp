@@ -1,9 +1,10 @@
 #pragma once
-#include "field.hpp"
-#include "boundary.hpp"
+#include <optional>
 #include <string>
 #include <vector>
-#include <optional>
+
+#include "boundary.hpp"
+#include "field.hpp"
 
 struct SimConfig {
     int nx = 256, ny = 256;
@@ -36,8 +37,13 @@ BCType bc_from_string(const std::string& s);
 std::string bc_to_string(BCType bc);
 
 void write_rank_layout_csv(const std::string& path,
-                           int rank, int nx_global, int ny_global,
-                           int x_offset, int y_offset, int nx_local, int ny_local, int halo);
+                           int rank,
+                           int nx_global,
+                           int ny_global,
+                           int x_offset,
+                           int y_offset,
+                           int nx_local,
+                           int ny_local,
+                           int halo);
 
 std::string snapshot_filename(const std::string& outdir, int step, int rank);
-

@@ -1,6 +1,6 @@
 #pragma once
-#include <vector>
 #include <stdexcept>
+#include <vector>
 
 struct Field {
     int nx_local, ny_local;
@@ -14,8 +14,8 @@ struct Field {
     double& at(int i, int j);
     const double& at(int i, int j) const;
 
-    int nx_total() const { return nx_local + 2*halo; }
-    int ny_total() const { return ny_local + 2*halo; }
+    int nx_total() const { return nx_local + 2 * halo; }
+    int ny_total() const { return ny_local + 2 * halo; }
 
     void fill(double value);
 };

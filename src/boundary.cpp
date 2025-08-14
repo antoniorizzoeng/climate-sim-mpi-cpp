@@ -1,4 +1,5 @@
 #include "boundary.hpp"
+
 #include <algorithm>
 
 static inline void fill_col(Field& f, int i, int j0, int j1, double v) {
@@ -8,9 +9,8 @@ static inline void fill_row(Field& f, int j, int i0, int i1, double v) {
     for (int i = i0; i <= i1; ++i) f.at(i, j) = v;
 }
 
-void apply_boundary(Field& f, const Decomp2D& dec, BCType bc, double value)
-{
-    const int h  = f.halo;
+void apply_boundary(Field& f, const Decomp2D& dec, BCType bc, double value) {
+    const int h = f.halo;
     const int nx = f.nx_local;
     const int ny = f.ny_local;
     const int iL = 0;
@@ -21,7 +21,8 @@ void apply_boundary(Field& f, const Decomp2D& dec, BCType bc, double value)
     const int i1 = f.nx_total() - 1;
 
     // assume MPI Cartesian is periodic.
-    if (bc == BCType::Periodic) return;
+    if (bc == BCType::Periodic)
+        return;
 
     if (dec.nbr_lr[0] == MPI_PROC_NULL) {
         if (bc == BCType::Dirichlet) {

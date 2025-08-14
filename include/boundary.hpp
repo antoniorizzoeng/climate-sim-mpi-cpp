@@ -1,6 +1,6 @@
 #pragma once
-#include "field.hpp"
 #include "decomp.hpp"
+#include "field.hpp"
 
 enum class BCType { Dirichlet, Neumann, Periodic };
 

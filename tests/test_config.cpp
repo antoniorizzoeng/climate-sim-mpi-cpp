@@ -1,8 +1,9 @@
-#include "gtest/gtest.h"
-#include "io.hpp"
 #include <fstream>
 
-std::string write_temp_yaml(const std::string &content) {
+#include "gtest/gtest.h"
+#include "io.hpp"
+
+std::string write_temp_yaml(const std::string& content) {
     char filename[] = "/tmp/test_config_XXXXXX.yaml";
     int fd = mkstemps(filename, 5);
     if (fd == -1) {
@@ -13,11 +14,10 @@ std::string write_temp_yaml(const std::string &content) {
     return std::string(filename);
 }
 
-
 TEST(Config, BCStringRoundTrip) {
     EXPECT_EQ(bc_from_string("dirichlet"), BCType::Dirichlet);
-    EXPECT_EQ(bc_from_string("neumann"),   BCType::Neumann);
-    EXPECT_EQ(bc_from_string("periodic"),  BCType::Periodic);
+    EXPECT_EQ(bc_from_string("neumann"), BCType::Neumann);
+    EXPECT_EQ(bc_from_string("periodic"), BCType::Periodic);
     EXPECT_EQ(bc_to_string(BCType::Dirichlet), std::string("dirichlet"));
 }
 
@@ -32,7 +32,8 @@ TEST(Config, LoadYamlFromFile) {
 
 TEST(Config, CLIOverridesYaml) {
     std::string path = std::string(CONFIGS_DIR) + "/test.yaml";
-    std::vector<std::string> cli = {"--nx=32", "--vy", "2.5", "--bc=neumann", "--output_prefix=bench"};
+    std::vector<std::string> cli = {
+        "--nx=32", "--vy", "2.5", "--bc=neumann", "--output_prefix=bench"};
     auto cfg = merged_config(path, cli);
     EXPECT_EQ(cfg.nx, 32);
     EXPECT_EQ(cfg.ny, 20);

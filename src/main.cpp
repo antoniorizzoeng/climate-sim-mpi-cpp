@@ -1,17 +1,18 @@
 #include <mpi.h>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <optional>
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <optional>
+#include <string>
+#include <vector>
 namespace fs = std::filesystem;
 
-#include "io.hpp"
-#include "field.hpp"
-#include "decomp.hpp"
 #include "boundary.hpp"
+#include "decomp.hpp"
+#include "field.hpp"
+#include "io.hpp"
 #include "stability.hpp"
 
 int main(int argc, char** argv) {
@@ -25,8 +26,10 @@ int main(int argc, char** argv) {
     std::optional<std::string> cfg_path;
     for (size_t i = 0; i < args.size(); ++i) {
         const auto& a = args[i];
-        if (a.rfind("--config=", 0) == 0) cfg_path = a.substr(9);
-        else if (a == "--config" && i + 1 < args.size()) cfg_path = args[i + 1];
+        if (a.rfind("--config=", 0) == 0)
+            cfg_path = a.substr(9);
+        else if (a == "--config" && i + 1 < args.size())
+            cfg_path = args[i + 1];
     }
 
     SimConfig cfg = merged_config(cfg_path, args);
@@ -35,8 +38,8 @@ int main(int argc, char** argv) {
     double dt_eff = cfg.dt;
     if (dt_eff > dt_limit) {
         if (world_rank == 0) {
-            std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit "
-                    << dt_limit << " -> clamping to dt=" << dt_limit << "\n";
+            std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit " << dt_limit
+                      << " -> clamping to dt=" << dt_limit << "\n";
         }
         dt_eff = dt_limit;
     }
@@ -44,16 +47,14 @@ int main(int argc, char** argv) {
 
     if (world_rank == 0) {
         std::cout << "climate-sim-mpi-cpp \n"
-                  << "  grid: " << cfg.nx << " x " << cfg.ny
-                  << "  dt: " << cfg.dt
-                  << "  steps: " << cfg.steps
-                  << "  D: " << cfg.D
-                  << "  v=(" << cfg.vx << "," << cfg.vy << ")"
+                  << "  grid: " << cfg.nx << " x " << cfg.ny << "  dt: " << cfg.dt
+                  << "  steps: " << cfg.steps << "  D: " << cfg.D << "  v=(" << cfg.vx << ","
+                  << cfg.vy << ")"
                   << "  bc=" << bc_to_string(cfg.bc) << "\n";
     }
 
     Decomp2D dec;
-    dec.init(MPI_COMM_WORLD, cfg.nx, cfg.ny); 
+    dec.init(MPI_COMM_WORLD, cfg.nx, cfg.ny);
 
     const int halo = 1;
     Field u(dec.nx_local, dec.ny_local, halo, cfg.dx, cfg.dy);
@@ -65,7 +66,8 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories("outputs");
         {
             std::ofstream ofs("outputs/rank_layout.csv", std::ios::app);
-            if (!ofs) throw std::runtime_error("Failed to open outputs/rank_layout.csv");
+            if (!ofs)
+                throw std::runtime_error("Failed to open outputs/rank_layout.csv");
             if (ofs.tellp() == 0) {
                 ofs << "rank,x_offset,y_offset,nx_local,ny_local,halo,nx_global,ny_global\n";
             }
@@ -75,8 +77,14 @@ int main(int argc, char** argv) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     write_rank_layout_csv("outputs/rank_layout.csv",
-                          world_rank, cfg.nx, cfg.ny,
-                          dec.x_offset, dec.y_offset, dec.nx_local, dec.ny_local, halo);
+                          world_rank,
+                          cfg.nx,
+                          cfg.ny,
+                          dec.x_offset,
+                          dec.y_offset,
+                          dec.nx_local,
+                          dec.ny_local,
+                          halo);
 
     MPI_Barrier(MPI_COMM_WORLD);
     double t0 = MPI_Wtime();
@@ -91,15 +99,17 @@ int main(int argc, char** argv) {
         }
         // exchange_halos(u);
         // apply_boundary(u);
-        // compute_diffusion(u, tmp, cfg); // TODO 
-        // compute_advection(u, tmp, cfg); // TODO 
+        // compute_diffusion(u, tmp, cfg); // TODO
+        // compute_advection(u, tmp, cfg); // TODO
         // std::swap(u.data, tmp.data);
 
         double te = MPI_Wtime();
         double dt = te - ts;
         sum_step += dt;
-        if (dt > max_step) max_step = dt;
-        if (dt < min_step) min_step = dt;
+        if (dt > max_step)
+            max_step = dt;
+        if (dt < min_step)
+            min_step = dt;
     }
 
     double t1 = MPI_Wtime();
@@ -111,8 +121,8 @@ int main(int argc, char** argv) {
     MPI_Reduce(&avg_step, &step_worst, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (world_rank == 0) {
-        std::cout << "timing: total_max=" << total_max
-                  << " s, worst_avg_step=" << step_worst << " s\n";
+        std::cout << "timing: total_max=" << total_max << " s, worst_avg_step=" << step_worst
+                  << " s\n";
     }
 
     dec.finalize();
