@@ -1,3 +1,8 @@
+---
+layout: default
+---
+{% include mathjax.html %}
+
 # Computational Analysis
 
 This document derives **compute**, **communication**, **memory**, and **I/O** costs for the main loop in this project and ties them to expected **strong/weak scaling** behavior and benchmark methodology.

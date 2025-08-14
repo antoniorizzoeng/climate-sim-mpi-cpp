@@ -1,3 +1,8 @@
+---
+layout: default
+---
+{% include mathjax.html %}
+
 # Numerics
 
 This document formalizes the mathematical model, discretization, stability limits, and boundary conditions used in the **climate-sim-mpi-cpp** project.

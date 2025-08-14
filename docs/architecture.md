@@ -1,3 +1,8 @@
+---
+layout: default
+---
+{% include mathjax.html %}
+
 # Architecture
 
 ## Overview
