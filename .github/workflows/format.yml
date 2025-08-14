@@ -1,0 +1,47 @@
+name: Format
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-15
+          ln -s /usr/bin/clang-format-15 $HOME/clang-format
+
+      - name: Show clang-format version
+        run: $HOME/clang-format --version
+
+      - name: Collect C/C++ sources
+        id: files
+        run: |
+          # Find source-like files, exclude build artifacts and externals
+          git ls-files \
+            | grep -E '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$' \
+            | grep -vE '^(build/|_deps/|third_party/|bench/_deps/)' \
+            > cf_files.txt
+          echo "count=$(wc -l < cf_files.txt)" >> $GITHUB_OUTPUT
+
+      - name: Check formatting (dry run)
+        run: |
+          # Fail if any reformatting would occur
+          bad=0
+          while IFS= read -r f; do
+            # Create a temp with formatted content, compare
+            $HOME/clang-format -style=file "$f" | diff -u "$f" - >/dev/null || bad=1
+          done < cf_files.txt
+          if [ $bad -ne 0 ]; then
+            echo "::error::clang-format found issues. Run it locally and commit the changes."
+            exit 1
+          fi
