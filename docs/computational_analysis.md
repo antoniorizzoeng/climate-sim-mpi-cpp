@@ -1,7 +1,7 @@
 ---
 layout: default
+title: Computational Analysis
 ---
-{% include mathjax.html %}
 
 # Computational Analysis
 
@@ -32,27 +32,27 @@ for n in 0..steps-1:
 
 ### 1) Halo exchange
 
-Faces exchanged once per step (nonblocking). For `h = 1`:
+Faces exchanged once per step (nonblocking). For $h = 1$:
 
-- Left/right faces: `2 × (ny · h)` doubles
-- Down/up faces: `2 × (nx · h)` doubles
+- Left/right faces: $2 \times (ny \cdot h)$ doubles
+- Down/up faces: $2 \times (nx \cdot h)$ doubles
 
-```math
+$$
 V_{\mathrm{halo}}(nx, ny) = 8 \left( 2\,ny + 2\,nx \right) \ \text{bytes} = 16 (nx+ny) \ \text{bytes}
-```
+$$
 
 Latency cost: 4 messages per step (L/R/D/U).  
-Bandwidth cost: proportional to `nx+ny` bytes.
+Bandwidth cost: proportional to $nx+ny$ bytes.
 
 ### 2) Boundary conditions
 
-Applied only at physical boundaries. Per-rank cost is `O(nx + ny)` (copy/mirror ghost rings). Interior ranks pay ~`O(1)` if neighbors exist.
+Applied only at physical boundaries. Per-rank cost is $O(nx + ny)$ (copy/mirror ghost rings). Interior ranks pay ~ $O(1)$ if neighbors exist.
 
 ### 3) Diffusion (5-point stencil, explicit)
 
 Each interior point touches constant neighbors:
 
-W_{\mathrm{diff}}(nx, ny) = \Theta(nx \cdot ny)
+$W_{\mathrm{diff}}(nx, ny) = \Theta(nx \cdot ny)$
 
 Arithmetic intensity (naive): ~(a few flops) per 5 loads + 1 store → memory bound unless tiled.
 
@@ -60,82 +60,82 @@ Arithmetic intensity (naive): ~(a few flops) per 5 loads + 1 store → memory bo
 
 Constant work per point (two 1D upwind derivatives):
 
-```math
+$$
 W_{\mathrm{adv}}(nx, ny) = \Theta(nx \cdot ny)
-```
+$$
 
 Similar memory behavior to diffusion (more loads if branching on velocity sign).
 
 ### 5) Swap
 
-Pointer swap is O(1). If implemented as copy, it would be `O(nx·ny)` (we avoid that).
+Pointer swap is $O(1)$. If implemented as copy, it would be $O(nx \cdot ny)$ (we avoid that).
 
 ### 6) Output & stats (when triggered)
 
-- `write_snapshot`: I/O bound; writing the full tile ⇒ `O(nx·ny)` data per rank (CSV is larger on disk).
-- `report_stats`: local reduction `O(nx·ny)` plus a global `MPI_Allreduce` → `O(log p)` latency and tiny payload.
+- `write_snapshot`: I/O bound; writing the full tile ⇒ $O(nx \cdot ny)$ data per rank (CSV is larger on disk).
+- `report_stats`: local reduction $O(nx \cdot ny)$ plus a global `MPI_Allreduce` → $O(\log p)$ latency and tiny payload.
 
 ## Global (per-step) Costs
 
 Sum over all ranks:
 
-- **Compute:** `Θ(Nx · Ny)` for diffusion + `Θ(Nx · Ny)` for advection → `Θ(Nx · Ny)` overall.
+- **Compute:** $\Theta(Nx \cdot Ny)$ for diffusion + $\Theta(Nx \cdot Ny)$ for advection → $\Theta(Nx \cdot Ny)$ overall.
 - **Communication:** total halo volume across ranks is ~ perimeter of all tiles. For a balanced grid:
   - Each interior edge counted twice; asymptotically, global halo volume per step is
-    ```math
+    $$
     V_{\mathrm{halo, global}} \approx 16 \left( Px \cdot Ny + Py \cdot Nx \right)\ \text{bytes}
-    ```
-  - Latency: `4p` messages per step (but overlappable in practice).
+    $$
+  - Latency: $4p$ messages per step (but overlappable in practice).
 
 ## Strong vs Weak Scaling Expectations
 
-### Strong scaling (fixed `Nx × Ny`, increase `p`)
+### Strong scaling (fixed $Nx \times Ny$, increase $p$)
 
-- Compute per rank: `Θ((Nx·Ny)/p)` → ideal time `∝ 1/p`.
-- Comm per rank: `Θ(nx + ny)` with `nx ≈ Nx/Px`, `ny ≈ Ny/Py`. If `Px ≈ Py ≈ √p`, then
-  ```math
+- Compute per rank: $\Theta((Nx\cdot Ny)/p)$ → ideal time $\propto 1/p$.
+- Comm per rank: $\Theta(nx + ny)$ with $nx \approx Nx/Px$, $ny \approx Ny/Py$. If $Px \approx Py \approx \sqrt{p}$, then
+  $$
   nx \approx \frac{Nx}{\sqrt{p}},\quad ny \approx \frac{Ny}{\sqrt{p}} \Rightarrow V_{\mathrm{halo}} \propto \frac{Nx + Ny}{\sqrt{p}}
-  ```
+  $$
 - Efficiency drops when comm + latency + sync dominate compute. Expect a knee where local tiles become too small.
 - Benchmark scripts will generate also Karp-Flatt metric as well as speedup and efficiency
 
-### Weak scaling (fixed `nx × ny` per rank, increase `p`)
+### Weak scaling (fixed $nx \times ny$ per rank, increase $p$)
 
-- Compute per rank: ~constant → ideal time flat vs `p`.
-- Comm per rank: `Θ(nx + ny)` → **also constant** (for fixed tile).  
+- Compute per rank: ~constant → ideal time flat vs $p$.
+- Comm per rank: $\Theta(nx + ny)$ → **also constant** (for fixed tile).  
   Degradation mainly due to global reductions, network congestion, and I/O.
 
 ## Memory Footprint (per rank)
 
 For two full fields (`u`, `tmp`) including halos:
 
-```math
+$$
 M_{\mathrm{fields}} = 2 \cdot (nx + 2h) (ny + 2h) \cdot 8\ \text{bytes}
-```
+$$
 
 Plus temporary lines, MPI buffers, and datatypes (usually negligible compared to arrays).
 
 ## Putting It Together — Per-step Time Model
 
 Let:
-- `α` = latency (s/message), `β` = inverse bandwidth (s/byte) for effective links.
-- `c_d, c_a` = compute costs per cell (s), for diffusion & advection respectively.
+- $\alpha$ = latency (s/message), $\beta$ = inverse bandwidth (s/byte) for effective links.
+- $c_d, c_a$ = compute costs per cell (s), for diffusion & advection respectively.
 
 Then a simple overlapping model:
 
-```math
+$$
 T_{\mathrm{step}} \approx \max\left[ (c_d + c_a)\,nx\,ny,\ \ 4\alpha + \beta\,V_{\mathrm{halo}}(nx, ny) \right] \ +\ T_{\mathrm{reduction}}\ (if\ stats)
-```
+$$
 
-`T_reduction` for `MPI_Allreduce` is ~`O(α log p + β·payload)`, tiny payload here.
+$T_{\mathrm{reduction}}$ for `MPI_Allreduce` is ~ $O(\alpha \log p + \beta\cdot payload)$, tiny payload here.
 
 ## Benchmarks to Run
 
-- **Strong scaling:** `Nx=Ny=1024`, `steps=200`, ranks ∈ {1,2,4,8,16}.  
-  Report: total runtime, per-step avg, `E_s = T1 / (p·Tp)`.
-- **Weak scaling:** per-rank `(nx, ny) = (256, 256)`, steps=200, ranks ∈ {1,4,16}.  
-  Report: per-step avg and `E_w = T_{p0}/T_p` with `p0=1`.
-- **Sensitivity:** vary halo `h` (1→2) to see comm slope; vary output frequency to observe I/O impact.
+- **Strong scaling:** $Nx=Ny=1024$, `steps=200`, ranks ∈ {1,2,4,8,16}.  
+  Report: total runtime, per-step avg, $E_s = T_1 / (p\cdot T_p)$.
+- **Weak scaling:** per-rank $(nx, ny) = (256, 256)$, steps=200, ranks ∈ {1,4,16}.  
+  Report: per-step avg and $E_w = T_{p0}/T_p$ with $p0=1$.
+- **Sensitivity:** vary halo $h$ (1→2) to see comm slope; vary output frequency to observe I/O impact.
 
 ## Measurement Methodology
 
@@ -148,30 +148,28 @@ T_{\mathrm{step}} \approx \max\left[ (c_d + c_a)\,nx\,ny,\ \ 4\alpha + \beta\,V_
 ## Sanity Checks
 
 - **Determinism:** identical outputs across runs with same seeds and decomposition.
-- **CFL/diffusion limits:** automatically compute a safe `Δt` from chosen `D`, `vx`, `vy`, `Δx`, `Δy` and assert.
+- **CFL/diffusion limits:** automatically compute a safe $\Delta t$ from chosen $D$, $v_x$, $v_y$, $\Delta x$, $\Delta y$ and assert.
 - **Halo correctness:** checksum per-rank borders before/after exchange.
 
 ## Appendix: Quick-reference Formulas
 
-- Halo volume per rank (`h=1`, doubles):
-  ```math
+- Halo volume per rank ($h=1$, doubles):
+  $$
   V_{\mathrm{halo}} = 16\,(nx + ny)\ \text{bytes}
-  ```
+  $$
 - Compute work per rank (per step):
-  ```math
+  $$
   W \sim \Theta(nx\,ny)
-  ```
+  $$
 - Memory (two fields with halos):
-  ```math
+  $$
   M \approx 16\,(nx + 2)^2\ \text{bytes}\ \text{if}\ nx=ny\ \text{and}\ h=1
-  ```
+  $$
 - Strong scaling efficiency:
-  ```math
+  $$
   E_s(p) = \frac{T_1}{p\,T_p}
-  ```
-- Weak scaling efficiency (baseline at `p0`):
-  ```math
+  $$
+- Weak scaling efficiency (baseline at $p0$):
+  $$
   E_w(p) = \frac{T_{p0}}{T_p}
-  ```
-
----
+  $$
