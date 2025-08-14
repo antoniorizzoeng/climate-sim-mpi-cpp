@@ -52,9 +52,7 @@ Applied only at physical boundaries. Per-rank cost is `O(nx + ny)` (copy/mirror 
 
 Each interior point touches constant neighbors:
 
-```math
 W_{\mathrm{diff}}(nx, ny) = \Theta(nx \cdot ny)
-```
 
 Arithmetic intensity (naive): ~(a few flops) per 5 loads + 1 store → memory bound unless tiled.
 
