@@ -1,4 +1,5 @@
 add_library(core
+    init.cpp
     field.cpp
     decomp.cpp
     diffusion.cpp

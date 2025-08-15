@@ -6,6 +6,19 @@
 #include "boundary.hpp"
 #include "field.hpp"
 
+struct ICConfig {
+    std::string mode = "preset";
+
+    std::string preset = "gaussian_hotspot";
+    double A = 1.0;
+    double sigma_frac = 0.05;
+    double xc_frac = 0.5;
+    double yc_frac = 0.5;
+
+    std::string path;
+    std::string format = "bin";
+};
+
 struct SimConfig {
     int nx = 256, ny = 256;
     double dx = 1.0, dy = 1.0;
@@ -20,6 +33,8 @@ struct SimConfig {
     BCType bc = BCType::Dirichlet;
 
     std::string output_prefix = "snap";
+
+    ICConfig ic;
 
     void validate() const;
 };

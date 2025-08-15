@@ -1,5 +1,6 @@
 #include <mpi.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -9,9 +10,13 @@
 #include <vector>
 namespace fs = std::filesystem;
 
+#include "advection.hpp"
 #include "boundary.hpp"
 #include "decomp.hpp"
+#include "diffusion.hpp"
 #include "field.hpp"
+#include "halo.hpp"
+#include "init.hpp"
 #include "io.hpp"
 #include "stability.hpp"
 
@@ -35,15 +40,13 @@ int main(int argc, char** argv) {
     SimConfig cfg = merged_config(cfg_path, args);
 
     double dt_limit = safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
-    double dt_eff = cfg.dt;
-    if (dt_eff > dt_limit) {
+    if (cfg.dt > dt_limit) {
         if (world_rank == 0) {
             std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit " << dt_limit
                       << " -> clamping to dt=" << dt_limit << "\n";
         }
-        dt_eff = dt_limit;
+        cfg.dt = dt_limit;
     }
-    cfg.dt = dt_eff;
 
     if (world_rank == 0) {
         std::cout << "climate-sim-mpi-cpp \n"
@@ -62,8 +65,16 @@ int main(int argc, char** argv) {
     u.fill(0.0);
     tmp.fill(0.0);
 
+    apply_initial_condition(dec, u, cfg);
+
     if (world_rank == 0) {
-        std::filesystem::create_directories("outputs");
+        double mn = *std::min_element(u.data.begin(), u.data.end());
+        double mx = *std::max_element(u.data.begin(), u.data.end());
+        std::cout << "IC min/max: " << mn << " / " << mx << "\n";
+    }
+
+    if (world_rank == 0) {
+        fs::create_directories("outputs");
         {
             std::ofstream ofs("outputs/rank_layout.csv", std::ios::app);
             if (!ofs)
@@ -72,7 +83,7 @@ int main(int argc, char** argv) {
                 ofs << "rank,x_offset,y_offset,nx_local,ny_local,halo,nx_global,ny_global\n";
             }
         }
-        std::filesystem::create_directories("outputs/snapshots");
+        fs::create_directories("outputs/snapshots");
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -87,9 +98,10 @@ int main(int argc, char** argv) {
                           halo);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double t0 = MPI_Wtime();
 
+    double t0 = MPI_Wtime();
     double sum_step = 0.0, max_step = 0.0, min_step = 1e300;
+
     for (int n = 0; n < cfg.steps; ++n) {
         double ts = MPI_Wtime();
 
@@ -97,11 +109,16 @@ int main(int argc, char** argv) {
             auto fname = snapshot_filename("outputs/snapshots", n, world_rank);
             write_field_csv(u, fname);
         }
-        // exchange_halos(u);
-        // apply_boundary(u);
-        // compute_diffusion(u, tmp, cfg); // TODO
-        // compute_advection(u, tmp, cfg); // TODO
-        // std::swap(u.data, tmp.data);
+
+        exchange_halos(u, dec, MPI_COMM_WORLD);
+        apply_boundary(u, dec, cfg.bc);
+
+        std::copy(u.data.begin(), u.data.end(), tmp.data.begin());
+
+        diffusion_step(u, tmp, cfg.D, cfg.dt);
+        advection_step(u, tmp, cfg.vx, cfg.vy, cfg.dt);
+
+        std::swap(u.data, tmp.data);
 
         double te = MPI_Wtime();
         double dt = te - ts;

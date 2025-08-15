@@ -41,5 +41,6 @@ __pycache__/
 *.log
 
 # Simulation artifacts
+/inputs/
 /outputs/
 /bench/results/

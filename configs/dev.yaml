@@ -1,5 +1,14 @@
 lgrid:    { nx: 512, ny: 512, dx: 1.0, dy: 1.0 }
-physics: { D: 0.05, vx: 0.5, vy: 0.0 }
-time:    { dt: 0.1, steps: 1000, out_every: 100 }
-bc: periodic
-output:  { prefix: "dev" }
+physics:  { D: 0.05, vx: 0.5, vy: 0.0 }
+time:     { dt: 0.1, steps: 1000, out_every: 100 }
+bc:       periodic
+output:   { prefix: "dev" }
+
+ic:
+  preset: gaussian_hotspot
+  file:   "inputs/ic_global_double.bin"
+  params:
+    A: 1.0
+    sigma_frac: 0.05
+    xc_frac: 0.5
+    yc_frac: 0.5
