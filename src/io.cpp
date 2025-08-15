@@ -8,6 +8,9 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+
+#include "boundary.hpp"
+#include "field.hpp"
 namespace fs = std::filesystem;
 
 static std::string lower(std::string s) {
@@ -120,6 +123,26 @@ SimConfig load_yaml_file(const std::string& path) {
         assign_if(root, "output_prefix", cfg.output_prefix);
     }
 
+    if (root["ic"]) {
+        auto ic = root["ic"];
+        if (ic["mode"])
+            cfg.ic.mode = ic["mode"].as<std::string>();
+        if (ic["preset"])
+            cfg.ic.preset = ic["preset"].as<std::string>();
+        if (ic["A"])
+            cfg.ic.A = ic["A"].as<double>();
+        if (ic["sigma_frac"])
+            cfg.ic.sigma_frac = ic["sigma_frac"].as<double>();
+        if (ic["xc_frac"])
+            cfg.ic.xc_frac = ic["xc_frac"].as<double>();
+        if (ic["yc_frac"])
+            cfg.ic.yc_frac = ic["yc_frac"].as<double>();
+        if (ic["path"])
+            cfg.ic.path = ic["path"].as<std::string>();
+        if (ic["format"])
+            cfg.ic.format = ic["format"].as<std::string>();
+    }
+
     cfg.validate();
     return cfg;
 }
@@ -134,7 +157,17 @@ static std::optional<std::string> get_value(const std::string& arg, const std::s
 }
 
 SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
-    SimConfig o;
+    SimConfig o;  // holds only explicit CLI overrides
+
+    auto starts_with = [](const std::string& s, const std::string& p) {
+        return s.rfind(p, 0) == 0;
+    };
+    auto get_value = [&](const std::string& arg,
+                         const std::string& key) -> std::optional<std::string> {
+        if (starts_with(arg, "--" + key + "="))
+            return arg.substr(key.size() + 3);
+        return std::nullopt;
+    };
 
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
@@ -173,6 +206,7 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
             return false;
         };
 
+        // grid
         if (set_int("nx", o.nx))
             continue;
         if (set_int("ny", o.ny))
@@ -182,6 +216,7 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
         if (set_dbl("dy", o.dy))
             continue;
 
+        // physics
         if (set_dbl("D", o.D))
             continue;
         if (set_dbl("vx", o.vx))
@@ -189,6 +224,7 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
         if (set_dbl("vy", o.vy))
             continue;
 
+        // time
         if (set_dbl("dt", o.dt))
             continue;
         if (set_int("steps", o.steps))
@@ -196,19 +232,39 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
         if (set_int("out_every", o.out_every))
             continue;
 
+        // BC
         if (starts_with(a, "--bc=") || a == "--bc") {
             std::string val;
-            if (auto v = get_value(a, "bc")) {
+            if (auto v = get_value(a, "bc"))
                 val = *v;
-            } else if (a == "--bc" && i + 1 < args.size()) {
+            else if (a == "--bc" && i + 1 < args.size())
                 val = args[i + 1];
-            } else
+            else
                 continue;
             o.bc = bc_from_string(val);
             continue;
         }
 
+        // output prefix
         if (set_str("output_prefix", o.output_prefix))
+            continue;
+
+        // IC overrides
+        if (set_str("ic.mode", o.ic.mode))
+            continue;
+        if (set_str("ic.preset", o.ic.preset))
+            continue;
+        if (set_dbl("ic.A", o.ic.A))
+            continue;
+        if (set_dbl("ic.sigma_frac", o.ic.sigma_frac))
+            continue;
+        if (set_dbl("ic.xc_frac", o.ic.xc_frac))
+            continue;
+        if (set_dbl("ic.yc_frac", o.ic.yc_frac))
+            continue;
+        if (set_str("ic.path", o.ic.path))
+            continue;
+        if (set_str("ic.format", o.ic.format))
             continue;
     }
 
@@ -216,20 +272,59 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
 }
 
 static void apply_overrides(SimConfig& base, const SimConfig& o) {
-    base.nx = o.nx ?: base.nx;
-    base.nx = (o.nx != SimConfig{}.nx ? o.nx : base.nx);
-    base.ny = (o.ny != SimConfig{}.ny ? o.ny : base.ny);
-    base.dx = (o.dx != SimConfig{}.dx ? o.dx : base.dx);
-    base.dy = (o.dy != SimConfig{}.dy ? o.dy : base.dy);
-    base.D = (o.D != SimConfig{}.D ? o.D : base.D);
-    base.vx = (o.vx != SimConfig{}.vx ? o.vx : base.vx);
-    base.vy = (o.vy != SimConfig{}.vy ? o.vy : base.vy);
-    base.dt = (o.dt != SimConfig{}.dt ? o.dt : base.dt);
-    base.steps = (o.steps != SimConfig{}.steps ? o.steps : base.steps);
-    base.out_every = (o.out_every != SimConfig{}.out_every ? o.out_every : base.out_every);
-    base.bc = (o.bc != SimConfig{}.bc ? o.bc : base.bc);
-    base.output_prefix =
-        (o.output_prefix != SimConfig{}.output_prefix ? o.output_prefix : base.output_prefix);
+    const SimConfig def{};  // to detect "not provided" vs "provided"
+
+    // grid
+    if (o.nx != def.nx)
+        base.nx = o.nx;
+    if (o.ny != def.ny)
+        base.ny = o.ny;
+    if (o.dx != def.dx)
+        base.dx = o.dx;
+    if (o.dy != def.dy)
+        base.dy = o.dy;
+
+    // physics
+    if (o.D != def.D)
+        base.D = o.D;
+    if (o.vx != def.vx)
+        base.vx = o.vx;
+    if (o.vy != def.vy)
+        base.vy = o.vy;
+
+    // time
+    if (o.dt != def.dt)
+        base.dt = o.dt;
+    if (o.steps != def.steps)
+        base.steps = o.steps;
+    if (o.out_every != def.out_every)
+        base.out_every = o.out_every;
+
+    // BC
+    if (o.bc != def.bc)
+        base.bc = o.bc;
+
+    // output
+    if (o.output_prefix != def.output_prefix)
+        base.output_prefix = o.output_prefix;
+
+    // IC
+    if (o.ic.mode != def.ic.mode)
+        base.ic.mode = o.ic.mode;
+    if (o.ic.preset != def.ic.preset)
+        base.ic.preset = o.ic.preset;
+    if (o.ic.A != def.ic.A)
+        base.ic.A = o.ic.A;
+    if (o.ic.sigma_frac != def.ic.sigma_frac)
+        base.ic.sigma_frac = o.ic.sigma_frac;
+    if (o.ic.xc_frac != def.ic.xc_frac)
+        base.ic.xc_frac = o.ic.xc_frac;
+    if (o.ic.yc_frac != def.ic.yc_frac)
+        base.ic.yc_frac = o.ic.yc_frac;
+    if (o.ic.path != def.ic.path)
+        base.ic.path = o.ic.path;
+    if (o.ic.format != def.ic.format)
+        base.ic.format = o.ic.format;
 }
 
 SimConfig merged_config(const std::optional<std::string>& yaml_path,

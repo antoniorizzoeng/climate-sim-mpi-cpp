@@ -2,7 +2,8 @@
 [![CI](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![CodeQL](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/codeql.yml/badge.svg)](../../actions/workflows/codeql.yml)
 [![clang-format](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/format.yml/badge.svg)](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/format.yml)
-[![pages-build-deployment](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/pages/pages-build-deployment)
+[![Deploy Docs](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/docs.yml/badge.svg)](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/docs.yml)
+
 A parallel climate simulation framework in C++ using MPI for domain decomposition and distributed computation.
 
 ## Features

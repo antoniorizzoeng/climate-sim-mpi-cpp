@@ -22,11 +22,14 @@ add_library(test_common INTERFACE)
 target_include_directories(test_common INTERFACE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
 
-add_executable(test_config test_config.cpp)
-target_link_libraries(test_config PRIVATE gtest_main core yaml-cpp)
-add_test(NAME config_suite COMMAND test_config)
+add_executable(test_init test_init.cpp)
+target_link_libraries(test_init PRIVATE gtest_main core)
+add_test(NAME init_suite COMMAND test_init)
 
-target_compile_definitions(test_config PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/configs")
+add_executable(test_io test_io.cpp)
+target_link_libraries(test_io PRIVATE gtest_main core yaml-cpp)
+add_test(NAME io_suite COMMAND test_io)
+target_compile_definitions(test_io PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/configs")
 
 add_executable(test_halo test_halo.cpp)
 target_link_libraries(test_halo PRIVATE core gtest_main MPI::MPI_CXX)
