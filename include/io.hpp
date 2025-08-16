@@ -8,15 +8,14 @@
 
 struct ICConfig {
     std::string mode = "preset";
-
     std::string preset = "gaussian_hotspot";
     double A = 1.0;
     double sigma_frac = 0.05;
     double xc_frac = 0.5;
     double yc_frac = 0.5;
-
     std::string path;
     std::string format = "bin";
+    std::string var;
 };
 
 struct SimConfig {
@@ -34,15 +33,32 @@ struct SimConfig {
 
     std::string output_prefix = "snap";
 
-    ICConfig ic;
+    ICConfig ic{};
 
     void validate() const;
 };
 
+struct CLIOverrides {
+    std::optional<int> nx, ny;
+    std::optional<double> dx, dy;
+
+    std::optional<double> D, vx, vy;
+
+    std::optional<double> dt;
+    std::optional<int> steps, out_every;
+
+    std::optional<BCType> bc;
+
+    std::optional<std::string> output_prefix;
+
+    struct {
+        std::optional<std::string> mode, preset, path, format, var;
+        std::optional<double> A, sigma_frac, xc_frac, yc_frac;
+    } ic;
+};
+
 SimConfig load_yaml_file(const std::string& path);
-
-SimConfig parse_cli_overrides(const std::vector<std::string>& args);
-
+CLIOverrides parse_cli_overrides(const std::vector<std::string>& args);
 SimConfig merged_config(const std::optional<std::string>& yaml_path,
                         const std::vector<std::string>& cli_args);
 
