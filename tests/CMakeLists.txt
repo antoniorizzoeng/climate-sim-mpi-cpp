@@ -13,7 +13,6 @@ else()
   set(MPI_TEST_PROCS 4)
 endif()
 
-
 include(CTest)
 enable_testing()
 include(GoogleTest)

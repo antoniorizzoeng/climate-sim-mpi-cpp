@@ -141,6 +141,8 @@ SimConfig load_yaml_file(const std::string& path) {
             cfg.ic.path = ic["path"].as<std::string>();
         if (ic["format"])
             cfg.ic.format = ic["format"].as<std::string>();
+        if (ic["var"])
+            cfg.ic.var = ic["var"].as<std::string>();
     }
 
     cfg.validate();
@@ -148,42 +150,28 @@ SimConfig load_yaml_file(const std::string& path) {
 }
 
 static bool starts_with(const std::string& s, const std::string& p) { return s.rfind(p, 0) == 0; }
-
 static std::optional<std::string> get_value(const std::string& arg, const std::string& key) {
-    if (starts_with(arg, "--" + key + "=")) {
+    if (starts_with(arg, "--" + key + "="))
         return arg.substr(key.size() + 3);
-    }
     return std::nullopt;
 }
 
-SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
-    SimConfig o;  // holds only explicit CLI overrides
+CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
+    CLIOverrides o;
 
-    auto starts_with = [](const std::string& s, const std::string& p) {
-        return s.rfind(p, 0) == 0;
+    auto try_set_int = [&](const std::string& a, const char* k, std::optional<int>& dst, size_t i) {
+        if (auto v = get_value(a, k)) {
+            dst = std::stoi(*v);
+            return true;
+        }
+        if (a == std::string("--") + k && i + 1 < args.size()) {
+            dst = std::stoi(args[i + 1]);
+            return true;
+        }
+        return false;
     };
-    auto get_value = [&](const std::string& arg,
-                         const std::string& key) -> std::optional<std::string> {
-        if (starts_with(arg, "--" + key + "="))
-            return arg.substr(key.size() + 3);
-        return std::nullopt;
-    };
-
-    for (size_t i = 0; i < args.size(); ++i) {
-        const std::string& a = args[i];
-
-        auto set_int = [&](const char* k, int& dst) {
-            if (auto v = get_value(a, k)) {
-                dst = std::stoi(*v);
-                return true;
-            }
-            if (a == std::string("--") + k && i + 1 < args.size()) {
-                dst = std::stoi(args[i + 1]);
-                return true;
-            }
-            return false;
-        };
-        auto set_dbl = [&](const char* k, double& dst) {
+    auto try_set_dbl =
+        [&](const std::string& a, const char* k, std::optional<double>& dst, size_t i) {
             if (auto v = get_value(a, k)) {
                 dst = std::stod(*v);
                 return true;
@@ -194,7 +182,8 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
             }
             return false;
         };
-        auto set_str = [&](const char* k, std::string& dst) {
+    auto try_set_str =
+        [&](const std::string& a, const char* k, std::optional<std::string>& dst, size_t i) {
             if (auto v = get_value(a, k)) {
                 dst = *v;
                 return true;
@@ -206,33 +195,32 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
             return false;
         };
 
-        // grid
-        if (set_int("nx", o.nx))
+    for (size_t i = 0; i < args.size(); ++i) {
+        const std::string& a = args[i];
+
+        if (try_set_int(a, "nx", o.nx, i))
             continue;
-        if (set_int("ny", o.ny))
+        if (try_set_int(a, "ny", o.ny, i))
             continue;
-        if (set_dbl("dx", o.dx))
+        if (try_set_dbl(a, "dx", o.dx, i))
             continue;
-        if (set_dbl("dy", o.dy))
+        if (try_set_dbl(a, "dy", o.dy, i))
             continue;
 
-        // physics
-        if (set_dbl("D", o.D))
+        if (try_set_dbl(a, "D", o.D, i))
             continue;
-        if (set_dbl("vx", o.vx))
+        if (try_set_dbl(a, "vx", o.vx, i))
             continue;
-        if (set_dbl("vy", o.vy))
-            continue;
-
-        // time
-        if (set_dbl("dt", o.dt))
-            continue;
-        if (set_int("steps", o.steps))
-            continue;
-        if (set_int("out_every", o.out_every))
+        if (try_set_dbl(a, "vy", o.vy, i))
             continue;
 
-        // BC
+        if (try_set_dbl(a, "dt", o.dt, i))
+            continue;
+        if (try_set_int(a, "steps", o.steps, i))
+            continue;
+        if (try_set_int(a, "out_every", o.out_every, i))
+            continue;
+
         if (starts_with(a, "--bc=") || a == "--bc") {
             std::string val;
             if (auto v = get_value(a, "bc"))
@@ -245,96 +233,90 @@ SimConfig parse_cli_overrides(const std::vector<std::string>& args) {
             continue;
         }
 
-        // output prefix
-        if (set_str("output_prefix", o.output_prefix))
+        if (try_set_str(a, "output_prefix", o.output_prefix, i))
             continue;
 
-        // IC overrides
-        if (set_str("ic.mode", o.ic.mode))
+        if (try_set_str(a, "ic.mode", o.ic.mode, i))
             continue;
-        if (set_str("ic.preset", o.ic.preset))
+        if (try_set_str(a, "ic.preset", o.ic.preset, i))
             continue;
-        if (set_dbl("ic.A", o.ic.A))
+        if (try_set_dbl(a, "ic.A", o.ic.A, i))
             continue;
-        if (set_dbl("ic.sigma_frac", o.ic.sigma_frac))
+        if (try_set_dbl(a, "ic.sigma_frac", o.ic.sigma_frac, i))
             continue;
-        if (set_dbl("ic.xc_frac", o.ic.xc_frac))
+        if (try_set_dbl(a, "ic.xc_frac", o.ic.xc_frac, i))
             continue;
-        if (set_dbl("ic.yc_frac", o.ic.yc_frac))
+        if (try_set_dbl(a, "ic.yc_frac", o.ic.yc_frac, i))
             continue;
-        if (set_str("ic.path", o.ic.path))
+        if (try_set_str(a, "ic.path", o.ic.path, i))
             continue;
-        if (set_str("ic.format", o.ic.format))
+        if (try_set_str(a, "ic.format", o.ic.format, i))
+            continue;
+        if (try_set_str(a, "ic.var", o.ic.var, i))
             continue;
     }
-
     return o;
 }
 
-static void apply_overrides(SimConfig& base, const SimConfig& o) {
-    const SimConfig def{};  // to detect "not provided" vs "provided"
+static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
+    if (o.nx)
+        base.nx = *o.nx;
+    if (o.ny)
+        base.ny = *o.ny;
+    if (o.dx)
+        base.dx = *o.dx;
+    if (o.dy)
+        base.dy = *o.dy;
 
-    // grid
-    if (o.nx != def.nx)
-        base.nx = o.nx;
-    if (o.ny != def.ny)
-        base.ny = o.ny;
-    if (o.dx != def.dx)
-        base.dx = o.dx;
-    if (o.dy != def.dy)
-        base.dy = o.dy;
+    if (o.D)
+        base.D = *o.D;
+    if (o.vx)
+        base.vx = *o.vx;
+    if (o.vy)
+        base.vy = *o.vy;
 
-    // physics
-    if (o.D != def.D)
-        base.D = o.D;
-    if (o.vx != def.vx)
-        base.vx = o.vx;
-    if (o.vy != def.vy)
-        base.vy = o.vy;
+    if (o.dt)
+        base.dt = *o.dt;
+    if (o.steps)
+        base.steps = *o.steps;
+    if (o.out_every)
+        base.out_every = *o.out_every;
 
-    // time
-    if (o.dt != def.dt)
-        base.dt = o.dt;
-    if (o.steps != def.steps)
-        base.steps = o.steps;
-    if (o.out_every != def.out_every)
-        base.out_every = o.out_every;
+    if (o.bc)
+        base.bc = *o.bc;
 
-    // BC
-    if (o.bc != def.bc)
-        base.bc = o.bc;
+    if (o.output_prefix)
+        base.output_prefix = *o.output_prefix;
 
-    // output
-    if (o.output_prefix != def.output_prefix)
-        base.output_prefix = o.output_prefix;
-
-    // IC
-    if (o.ic.mode != def.ic.mode)
-        base.ic.mode = o.ic.mode;
-    if (o.ic.preset != def.ic.preset)
-        base.ic.preset = o.ic.preset;
-    if (o.ic.A != def.ic.A)
-        base.ic.A = o.ic.A;
-    if (o.ic.sigma_frac != def.ic.sigma_frac)
-        base.ic.sigma_frac = o.ic.sigma_frac;
-    if (o.ic.xc_frac != def.ic.xc_frac)
-        base.ic.xc_frac = o.ic.xc_frac;
-    if (o.ic.yc_frac != def.ic.yc_frac)
-        base.ic.yc_frac = o.ic.yc_frac;
-    if (o.ic.path != def.ic.path)
-        base.ic.path = o.ic.path;
-    if (o.ic.format != def.ic.format)
-        base.ic.format = o.ic.format;
+    if (o.ic.mode)
+        base.ic.mode = *o.ic.mode;
+    if (o.ic.preset)
+        base.ic.preset = *o.ic.preset;
+    if (o.ic.A)
+        base.ic.A = *o.ic.A;
+    if (o.ic.sigma_frac)
+        base.ic.sigma_frac = *o.ic.sigma_frac;
+    if (o.ic.xc_frac)
+        base.ic.xc_frac = *o.ic.xc_frac;
+    if (o.ic.yc_frac)
+        base.ic.yc_frac = *o.ic.yc_frac;
+    if (o.ic.path)
+        base.ic.path = *o.ic.path;
+    if (o.ic.format)
+        base.ic.format = *o.ic.format;
 }
 
 SimConfig merged_config(const std::optional<std::string>& yaml_path,
                         const std::vector<std::string>& cli_args) {
     SimConfig cfg;
+
     if (yaml_path && !yaml_path->empty()) {
         cfg = load_yaml_file(*yaml_path);
     }
-    SimConfig cli = parse_cli_overrides(cli_args);
+
+    CLIOverrides cli = parse_cli_overrides(cli_args);
     apply_overrides(cfg, cli);
+
     cfg.validate();
     return cfg;
 }

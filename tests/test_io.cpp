@@ -1,8 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <fstream>
 #include <string>
 #include <vector>
 
+#include "decomp.hpp"
+#include "field.hpp"
+#include "init.hpp"
 #include "io.hpp"
 
 static std::string cfg_path(const char* fname) {
@@ -22,25 +26,29 @@ TEST(IO_Yaml, LoadsNestedBlocksAndBC) {
     EXPECT_GE(cfg.D, 0.0);
 }
 
-/*TEST(IO_CLI, SimpleScalarOverrides) {
-    SimConfig base = load_yaml_file(cfg_path("dev.yaml"));
-    std::vector<std::string> args = {
-        "--nx=123", "--ny", "321", "--dx=2.5", "--D=0.7", "--vx=1.25",
-        "--dt", "0.02", "--bc=dirichlet", "--output_prefix", "unit"
-    };
-    SimConfig cli = parse_cli_overrides(args);
-    SimConfig merged = base;
-    merged = merged_config(cfg_path("dev.yaml"), args);
+TEST(IO_CLI, SimpleScalarOverrides) {
+    // base config comes from YAML
+    auto tmpfile = "tmp_test.yaml";
+    {
+        std::ofstream ofs(tmpfile);
+        ofs << "grid: { nx: 64, ny: 64, dx: 1.0, dy: 1.0 }\n"
+            << "physics: { D: 0.01, vx: 0.0, vy: 0.0 }\n"
+            << "time: { dt: 0.1, steps: 10, out_every: 5 }\n"
+            << "bc: dirichlet\n"
+            << "output: { prefix: \"from_yaml\" }\n";
+    }
 
-    EXPECT_EQ(merged.nx, 123);
-    EXPECT_EQ(merged.ny, 321);
-    EXPECT_DOUBLE_EQ(merged.dx, 2.5);
-    EXPECT_DOUBLE_EQ(merged.D, 0.7);
-    EXPECT_DOUBLE_EQ(merged.vx, 1.25);
-    EXPECT_DOUBLE_EQ(merged.dt, 0.02);
-    EXPECT_EQ(bc_to_string(merged.bc), "dirichlet");
-    EXPECT_EQ(merged.output_prefix, "unit");
-}*/
+    std::vector<std::string> args = {
+        "--nx=128", "--ny=256", "--dt=0.2", "--bc=periodic", "--output_prefix=from_cli"};
+
+    SimConfig merged = merged_config(tmpfile, args);
+
+    EXPECT_EQ(merged.nx, 128);                       // CLI wins
+    EXPECT_EQ(merged.ny, 256);                       // CLI wins
+    EXPECT_DOUBLE_EQ(merged.dt, 0.2);                // CLI wins
+    EXPECT_EQ(bc_to_string(merged.bc), "periodic");  // CLI wins
+    EXPECT_EQ(merged.output_prefix, "from_cli");     // CLI wins
+}
 
 TEST(IO_CLI, ICOverridesTakePrecedence) {
     std::vector<std::string> args = {"--ic.mode=preset",
@@ -67,4 +75,29 @@ TEST(IO_BC, ParseRoundtrip) {
     EXPECT_EQ(bc_to_string(BCType::Dirichlet), std::string("dirichlet"));
     EXPECT_EQ(bc_to_string(BCType::Neumann), std::string("neumann"));
     EXPECT_EQ(bc_to_string(BCType::Periodic), std::string("periodic"));
+}
+
+TEST(IO_CLI, InvalidBoundaryConditionThrows) {
+    std::vector<std::string> args = {"--bc=foobar"};
+    EXPECT_THROW({ merged_config(std::nullopt, args); }, std::runtime_error);
+}
+
+TEST(IO_CLI, InvalidGridSizeThrows) {
+    std::vector<std::string> args = {"--nx=-10", "--ny=128"};
+    EXPECT_THROW({ merged_config(std::nullopt, args); }, std::runtime_error);
+}
+
+TEST(IO_CLI, InvalidTimestepThrows) {
+    std::vector<std::string> args = {"--dt=0.0", "--steps=10"};
+    EXPECT_THROW({ merged_config(std::nullopt, args); }, std::runtime_error);
+}
+
+TEST(IO_CLI, InvalidICPresetThrows) {
+    SimConfig cfg;
+    cfg.ic.mode = "preset";
+    cfg.ic.preset = "notarealpreset";
+
+    Field f(cfg.nx, cfg.ny, 0, cfg.dx, cfg.dy);
+    Decomp2D dec;
+    EXPECT_THROW({ apply_initial_condition(dec, f, cfg); }, std::runtime_error);
 }
