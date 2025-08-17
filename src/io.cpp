@@ -119,8 +119,10 @@ SimConfig load_yaml_file(const std::string& path) {
     if (root["output"]) {
         auto o = root["output"];
         assign_if(o, "prefix", cfg.output_prefix);
+        assign_if(o, "format", cfg.output_format);  // <-- NEW
     } else {
         assign_if(root, "output_prefix", cfg.output_prefix);
+        assign_if(root, "output_format", cfg.output_format);  // optional legacy
     }
 
     if (root["ic"]) {
@@ -233,7 +235,14 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
             continue;
         }
 
+        if (try_set_str(a, "output.prefix", o.output_prefix, i))
+            continue;
         if (try_set_str(a, "output_prefix", o.output_prefix, i))
+            continue;
+
+        if (try_set_str(a, "output.format", o.output_format, i))
+            continue;
+        if (try_set_str(a, "output_format", o.output_format, i))
             continue;
 
         if (try_set_str(a, "ic.mode", o.ic.mode, i))
@@ -287,6 +296,8 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
 
     if (o.output_prefix)
         base.output_prefix = *o.output_prefix;
+    if (o.output_format)
+        base.output_format = *o.output_format;
 
     if (o.ic.mode)
         base.ic.mode = *o.ic.mode;
@@ -361,4 +372,57 @@ std::string snapshot_filename(const std::string& outdir, int step, int rank) {
     char buf[256];
     std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.csv", step, rank);
     return (fs::path(outdir) / buf).string();
+}
+
+#ifdef HAS_NETCDF
+#include <netcdf.h>
+
+static inline void nc_throw_if(int status, const char* where) {
+    if (status != NC_NOERR) {
+        std::ostringstream oss;
+        oss << where << ": " << nc_strerror(status);
+        throw std::runtime_error(oss.str());
+    }
+}
+#endif
+
+std::string snapshot_filename_nc(const std::string& outdir, int step, int rank) {
+    fs::create_directories(outdir);
+    char buf[256];
+    std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.nc", step, rank);
+    return (fs::path(outdir) / buf).string();
+}
+
+bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D&) {
+#ifndef HAS_NETCDF
+    return false;
+#else
+    const int NY = f.ny_total();
+    const int NX = f.nx_total();
+    std::vector<double> plane((size_t)NX * NY);
+    for (int j = 0; j < NY; ++j) {
+        for (int i = 0; i < NX; ++i) {
+            plane[(size_t)j * NX + i] = f.at(i, j);
+        }
+    }
+
+    int ncid = -1;
+    int dim_y = -1, dim_x = -1;
+    int varid = -1;
+
+    nc_throw_if(nc_create(filename.c_str(), NC_CLOBBER | NC_NETCDF4, &ncid), "nc_create");
+
+    nc_throw_if(nc_def_dim(ncid, "y", NY, &dim_y), "nc_def_dim(y)");
+    nc_throw_if(nc_def_dim(ncid, "x", NX, &dim_x), "nc_def_dim(x)");
+
+    int dims[2] = {dim_y, dim_x};
+    nc_throw_if(nc_def_var(ncid, "T", NC_DOUBLE, 2, dims, &varid), "nc_def_var(T)");
+    nc_put_att_text(ncid, varid, "long_name", 17, "scalar snapshot");
+    nc_put_att_text(ncid, varid, "units", 9, "arbitrary");
+
+    nc_throw_if(nc_enddef(ncid), "nc_enddef");
+    nc_throw_if(nc_put_var_double(ncid, varid, plane.data()), "nc_put_var_double");
+    nc_close(ncid);
+    return true;
+#endif
 }
