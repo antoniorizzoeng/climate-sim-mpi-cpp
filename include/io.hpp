@@ -33,6 +33,8 @@ struct SimConfig {
 
     std::string output_prefix = "snap";
 
+    std::string output_format = "csv";
+
     ICConfig ic{};
 
     void validate() const;
@@ -50,6 +52,7 @@ struct CLIOverrides {
     std::optional<BCType> bc;
 
     std::optional<std::string> output_prefix;
+    std::optional<std::string> output_format;
 
     struct {
         std::optional<std::string> mode, preset, path, format, var;
@@ -78,3 +81,7 @@ void write_rank_layout_csv(const std::string& path,
                            int halo);
 
 std::string snapshot_filename(const std::string& outdir, int step, int rank);
+
+std::string snapshot_filename_nc(const std::string& outdir, int step, int rank);
+
+bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D& dec);
