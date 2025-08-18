@@ -56,7 +56,7 @@ target_compile_definitions(test_io PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/conf
 add_executable(test_halo test_halo.cpp)
 target_link_libraries(test_halo PRIVATE core gtest_main MPI::MPI_CXX)
 add_test(NAME halo_mpi
-  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
+  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
           $<TARGET_FILE:test_halo>)
 
 add_executable(test_field test_field.cpp)
@@ -74,7 +74,7 @@ add_test(NAME stability COMMAND test_stability)
 add_executable(test_decomp_mpi test_decomp_mpi.cpp)
 target_link_libraries(test_decomp_mpi PRIVATE core gtest_main MPI::MPI_CXX)
 add_test(NAME decomp_mpi
-  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
+  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
           $<TARGET_FILE:test_decomp_mpi>)
 
 add_executable(test_boundary test_boundary.cpp)
