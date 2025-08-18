@@ -119,10 +119,10 @@ SimConfig load_yaml_file(const std::string& path) {
     if (root["output"]) {
         auto o = root["output"];
         assign_if(o, "prefix", cfg.output_prefix);
-        assign_if(o, "format", cfg.output_format);  // <-- NEW
+        assign_if(o, "format", cfg.output_format);
     } else {
         assign_if(root, "output_prefix", cfg.output_prefix);
-        assign_if(root, "output_format", cfg.output_format);  // optional legacy
+        assign_if(root, "output_format", cfg.output_format);
     }
 
     if (root["ic"]) {
@@ -393,36 +393,57 @@ std::string snapshot_filename_nc(const std::string& outdir, int step, int rank) 
     return (fs::path(outdir) / buf).string();
 }
 
-bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D&) {
-#ifndef HAS_NETCDF
-    return false;
-#else
-    const int NY = f.ny_total();
-    const int NX = f.nx_total();
-    std::vector<double> plane((size_t)NX * NY);
-    for (int j = 0; j < NY; ++j) {
-        for (int i = 0; i < NX; ++i) {
-            plane[(size_t)j * NX + i] = f.at(i, j);
+bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D& /*dec*/) {
+#ifdef HAS_NETCDF
+    int ncid;
+    int status = nc_create(filename.c_str(), NC_NETCDF4 | NC_CLOBBER, &ncid);
+    if (status != NC_NOERR)
+        return false;
+
+    size_t ny = static_cast<size_t>(f.ny_total());
+    size_t nx = static_cast<size_t>(f.nx_total());
+
+    int dim_y, dim_x;
+    if (nc_def_dim(ncid, "y", ny, &dim_y) != NC_NOERR) {
+        nc_close(ncid);
+        return false;
+    }
+    if (nc_def_dim(ncid, "x", nx, &dim_x) != NC_NOERR) {
+        nc_close(ncid);
+        return false;
+    }
+
+    int dims[2] = {dim_y, dim_x};
+    int varid;
+    if (nc_def_var(ncid, "u", NC_DOUBLE, 2, dims, &varid) != NC_NOERR) {
+        nc_close(ncid);
+        return false;
+    }
+
+    nc_put_att_text(ncid, varid, "long_name", 1, "u");
+
+    if (nc_enddef(ncid) != NC_NOERR) {
+        nc_close(ncid);
+        return false;
+    }
+
+    std::vector<double> flat(nx * ny);
+    for (size_t j = 0; j < ny; ++j) {
+        for (size_t i = 0; i < nx; ++i) {
+            flat[j * nx + i] = f.at(static_cast<int>(i), static_cast<int>(j));
         }
     }
 
-    int ncid = -1;
-    int dim_y = -1, dim_x = -1;
-    int varid = -1;
+    if (nc_put_var_double(ncid, varid, flat.data()) != NC_NOERR) {
+        nc_close(ncid);
+        return false;
+    }
 
-    nc_throw_if(nc_create(filename.c_str(), NC_CLOBBER | NC_NETCDF4, &ncid), "nc_create");
-
-    nc_throw_if(nc_def_dim(ncid, "y", NY, &dim_y), "nc_def_dim(y)");
-    nc_throw_if(nc_def_dim(ncid, "x", NX, &dim_x), "nc_def_dim(x)");
-
-    int dims[2] = {dim_y, dim_x};
-    nc_throw_if(nc_def_var(ncid, "T", NC_DOUBLE, 2, dims, &varid), "nc_def_var(T)");
-    nc_put_att_text(ncid, varid, "long_name", 17, "scalar snapshot");
-    nc_put_att_text(ncid, varid, "units", 9, "arbitrary");
-
-    nc_throw_if(nc_enddef(ncid), "nc_enddef");
-    nc_throw_if(nc_put_var_double(ncid, varid, plane.data()), "nc_put_var_double");
     nc_close(ncid);
     return true;
+#else
+    (void)f;
+    (void)filename;
+    return false;
 #endif
 }
