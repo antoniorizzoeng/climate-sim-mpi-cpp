@@ -27,6 +27,10 @@ endif()
 
 message(STATUS "MPI_TEST_PROCS = ${MPI_TEST_PROCS}")
 
+if(DEFINED ENV{GITHUB_ACTIONS})
+  set(MPIEXEC_PREFLAGS "--oversubscribe")
+endif()
+
 include(CTest)
 enable_testing()
 include(GoogleTest)
