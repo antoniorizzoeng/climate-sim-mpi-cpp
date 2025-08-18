@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "boundary.hpp"
+#include "decomp.hpp"
 #include "field.hpp"
 
 struct ICConfig {
