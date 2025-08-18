@@ -28,8 +28,12 @@ namespace fs = std::filesystem;
 #ifndef MPIEXEC_NUMPROC_FLAG
 #define MPIEXEC_NUMPROC_FLAG "-np"
 #endif
-
-namespace fs = std::filesystem;
+#ifndef MPIEXEC_PREFLAGS
+#define MPIEXEC_PREFLAGS ""
+#endif
+#ifndef INTEGRATION_MPI_PROCS
+#define INTEGRATION_MPI_PROCS 4
+#endif
 
 // ---------- Helpers ----------
 struct RankTile {
@@ -231,8 +235,8 @@ static int run_cmd(const std::string& cmd) { return std::system(cmd.c_str()); }
 // ---------- Tests ----------
 TEST(Integration_Main, ConstantZeroCSV_Step0_AllZeros) {
     std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " 2 " << CLIMATE_SIM_EXE
-        << " --nx=32 --ny=32 --dx=1 --dy=1"
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=32 --ny=32 --dx=1 --dy=1"
         << " --D=0 --vx=0 --vy=0"
         << " --dt=0.1 --steps=1 --out_every=1"
         << " --bc=periodic"
@@ -257,8 +261,8 @@ TEST(Integration_Main, GaussianPresetCSV_NontrivialRange) {
     fs::create_directories("outputs/snapshots");
 
     std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " 2 " << CLIMATE_SIM_EXE
-        << " --nx=64 --ny=64 --dx=1 --dy=1"
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=64 --ny=64 --dx=1 --dy=1"
         << " --D=0 --vx=0 --vy=0"
         << " --dt=0.1 --steps=1 --out_every=1"
         << " --bc=periodic"
@@ -298,8 +302,8 @@ TEST(Integration_Main, BinaryIC_LoadsCorrectMinMax) {
 
     fs::remove_all("outputs");
     std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " 2 " << CLIMATE_SIM_EXE
-        << " --nx=64 --ny=32 --dx=1 --dy=1"
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=64 --ny=32 --dx=1 --dy=1"
         << " --D=0 --vx=0 --vy=0"
         << " --dt=0.1 --steps=1 --out_every=1"
         << " --bc=periodic"
@@ -322,8 +326,8 @@ TEST(Integration_Main, NetCDFOutput_WritesAndIsReadable) {
     fs::remove_all("outputs");
 
     std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " 2 " << CLIMATE_SIM_EXE
-        << " --nx=32 --ny=32 --dx=1 --dy=1"
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=32 --ny=32 --dx=1 --dy=1"
         << " --D=0 --vx=0 --vy=0"
         << " --dt=0.1 --steps=1 --out_every=1"
         << " --bc=periodic"
@@ -355,8 +359,8 @@ TEST(Integration_Main, Diffusion_DecreasesPeak) {
     fs::create_directories("outputs/snapshots");
 
     std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " 2 " << CLIMATE_SIM_EXE
-        << " --nx=64 --ny=64 --dx=1 --dy=1"
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=64 --ny=64 --dx=1 --dy=1"
         << " --D=1.0 --vx=0 --vy=0"
         << " --dt=0.1 --steps=11 --out_every=10"
         << " --bc=periodic"
@@ -395,8 +399,8 @@ TEST(Integration_Main, Advection_ShiftsHotspotRight) {
     fs::remove_all("outputs");
 
     std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " 2 " << CLIMATE_SIM_EXE
-        << " --nx=64 --ny=64 --dx=1 --dy=1"
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=64 --ny=64 --dx=1 --dy=1"
         << " --D=0 --vx=1 --vy=0"
         << " --dt=1 --steps=6 --out_every=1"
         << " --bc=periodic"

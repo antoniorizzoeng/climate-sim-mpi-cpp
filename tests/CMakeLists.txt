@@ -7,35 +7,25 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-if(NOT DEFINED MPI_TEST_PROCS)
-  cmake_host_system_information(RESULT _LOGICAL_CORES QUERY NUMBER_OF_LOGICAL_CORES)
-  if(DEFINED ENV{GITHUB_ACTIONS})
-    set(_DEFAULT_MPI_PROCS 4)
-  else()
-    if(_LOGICAL_CORES AND _LOGICAL_CORES GREATER 0)
-      if(_LOGICAL_CORES GREATER 4)
-        set(_DEFAULT_MPI_PROCS 4)
-      else()
-        set(_DEFAULT_MPI_PROCS ${_LOGICAL_CORES})
-      endif()
-    else()
-      set(_DEFAULT_MPI_PROCS 4)
-    endif()
-  endif()
-  set(MPI_TEST_PROCS ${_DEFAULT_MPI_PROCS} CACHE STRING "MPI ranks used for tests")
+set(MPI_TEST_PROCS 4 CACHE STRING "MPI ranks used for tests" FORCE)
+
+if(NOT MPIEXEC_EXECUTABLE)
+  set(MPIEXEC_EXECUTABLE mpirun)
 endif()
+if(NOT MPIEXEC_NUMPROC_FLAG)
+  set(MPIEXEC_NUMPROC_FLAG -np)
+endif()
+set(MPIEXEC_PREFLAGS "--oversubscribe")
 
 message(STATUS "MPI_TEST_PROCS = ${MPI_TEST_PROCS}")
-
-if(DEFINED ENV{GITHUB_ACTIONS})
-  set(MPIEXEC_PREFLAGS "--oversubscribe")
-endif()
+message(STATUS "MPIEXEC_EXECUTABLE = ${MPIEXEC_EXECUTABLE}")
+message(STATUS "MPIEXEC_NUMPROC_FLAG = ${MPIEXEC_NUMPROC_FLAG}")
+message(STATUS "MPIEXEC_PREFLAGS = ${MPIEXEC_PREFLAGS}")
 
 include(CTest)
 enable_testing()
 include(GoogleTest)
 
-# Common interface for tests that just need headers and MPI
 add_library(test_common INTERFACE)
 target_include_directories(test_common INTERFACE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
@@ -43,7 +33,6 @@ target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
 # ------------------------------
 # Unit tests
 # ------------------------------
-
 add_executable(test_init test_init.cpp)
 target_link_libraries(test_init PRIVATE gtest_main core)
 add_test(NAME init_suite COMMAND test_init)
@@ -90,27 +79,16 @@ add_executable(test_integration test_integration.cpp)
 target_include_directories(test_integration PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(test_integration PRIVATE core GTest::gtest GTest::gtest_main)
 
-# Pass paths/flags into the test
-# (climate_sim target is defined in src/CMakeLists.txt)
 target_compile_definitions(test_integration PRIVATE
   CLIMATE_SIM_EXE="$<TARGET_FILE:climate_sim>"
   PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
   SCRIPTS_DIR="${CMAKE_SOURCE_DIR}/scripts"
-)
-
-# Ensure mpiexec variables are available; provide sane fallbacks if missing
-if(NOT MPIEXEC_EXECUTABLE)
-  set(MPIEXEC_EXECUTABLE mpirun)
-endif()
-if(NOT MPIEXEC_NUMPROC_FLAG)
-  set(MPIEXEC_NUMPROC_FLAG -np)
-endif()
-target_compile_definitions(test_integration PRIVATE
   MPIEXEC_EXECUTABLE="${MPIEXEC_EXECUTABLE}"
   MPIEXEC_NUMPROC_FLAG="${MPIEXEC_NUMPROC_FLAG}"
+  MPIEXEC_PREFLAGS="${MPIEXEC_PREFLAGS}"
+  INTEGRATION_MPI_PROCS=${MPI_TEST_PROCS}
 )
 
-# Propagate NetCDF capability flag (HAS_NETCDF) from core to the test if present
 get_target_property(_core_defs core COMPILE_DEFINITIONS)
 if(_core_defs)
   list(FIND _core_defs "HAS_NETCDF" _has_nc_idx)
@@ -119,5 +97,4 @@ if(_core_defs)
   endif()
 endif()
 
-# Discover & register integration tests
 gtest_discover_tests(test_integration DISCOVERY_TIMEOUT 30)
