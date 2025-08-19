@@ -232,6 +232,75 @@ static double com_x(const std::vector<std::vector<double>>& A) {
 
 static int run_cmd(const std::string& cmd) { return std::system(cmd.c_str()); }
 
+static std::vector<std::vector<double>> assemble_global_csv_snapshot_from(const std::string& dir,
+                                                                          int step) {
+    auto tiles = read_rank_layout("outputs/rank_layout.csv");
+    if (tiles.empty())
+        throw std::runtime_error("rank_layout.csv has no tiles");
+
+    const int NX = tiles[0].nxg;
+    const int NY = tiles[0].nyg;
+    std::vector<std::vector<double>> U(NY, std::vector<double>(NX, 0.0));
+
+    for (const auto& t : tiles) {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.csv", step, t.rank);
+        fs::path f = fs::path(dir) / buf;
+        if (!fs::exists(f))
+            throw std::runtime_error("Missing snapshot: " + f.string());
+        auto tile = read_csv_2d(f);
+        if (tile.empty())
+            throw std::runtime_error("Empty tile: " + f.string());
+        const int ny_csv = static_cast<int>(tile.size());
+        const int nx_csv = static_cast<int>(tile[0].size());
+        const int expect_ny = t.ny + 2 * t.halo;
+        const int expect_nx = t.nx + 2 * t.halo;
+        if (ny_csv != expect_ny || nx_csv != expect_nx)
+            throw std::runtime_error("CSV tile shape mismatch");
+        for (int j = 0; j < t.ny; ++j)
+            for (int i = 0; i < t.nx; ++i)
+                U[t.y_off + j][t.x_off + i] = tile[j + t.halo][i + t.halo];
+    }
+    return U;
+}
+
+#ifdef HAS_NETCDF
+static std::vector<std::vector<double>> assemble_global_nc_snapshot_from(const std::string& dir,
+                                                                         int step,
+                                                                         const char* var) {
+    auto tiles = read_rank_layout("outputs/rank_layout.csv");
+    if (tiles.empty())
+        throw std::runtime_error("rank_layout.csv has no tiles");
+
+    const int NX = tiles[0].nxg;
+    const int NY = tiles[0].nyg;
+    std::vector<std::vector<double>> U(NY, std::vector<double>(NX, 0.0));
+
+    for (const auto& t : tiles) {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.nc", step, t.rank);
+        fs::path f = fs::path(dir) / buf;
+        if (!fs::exists(f))
+            throw std::runtime_error("Missing snapshot: " + f.string());
+        auto tile = read_nc_2d(f, var);
+        if (tile.empty())
+            throw std::runtime_error("Empty tile: " + f.string());
+        const int ny_nc = static_cast<int>(tile.size());
+        const int nx_nc = static_cast<int>(tile[0].size());
+        int off = 0;
+        if (ny_nc == t.ny && nx_nc == t.nx) {
+            off = 0;
+        } else if (ny_nc == t.ny + 2 * t.halo && nx_nc == t.nx + 2 * t.halo) {
+            off = t.halo;
+        } else {
+            throw std::runtime_error("NetCDF tile shape mismatch");
+        }
+        for (int j = 0; j < t.ny; ++j)
+            for (int i = 0; i < t.nx; ++i) U[t.y_off + j][t.x_off + i] = tile[j + off][i + off];
+    }
+    return U;
+}
+#endif
 // ---------- Tests ----------
 TEST(Integration_Main, ConstantZeroCSV_Step0_AllZeros) {
     std::ostringstream cmd;
@@ -418,3 +487,88 @@ TEST(Integration_Main, Advection_ShiftsHotspotRight) {
     double s5 = sum2d(U5);
     EXPECT_NEAR(s5, s0, 0.05 * s0);
 }
+
+TEST(Integration_Main, MPI_Decomposition_Coverage_NoOverlap) {
+    fs::remove_all("outputs");
+    fs::create_directories("outputs/snapshots");
+
+    std::ostringstream cmd;
+    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=64 --ny=48 --dx=1 --dy=1"
+        << " --D=0 --vx=0 --vy=0"
+        << " --dt=0.1 --steps=1 --out_every=1"
+        << " --bc=periodic"
+        << " --ic.mode=preset --ic.preset=constant_zero";
+    ASSERT_EQ(run_cmd(cmd.str()), 0);
+
+    auto tiles = read_rank_layout("outputs/rank_layout.csv");
+    ASSERT_FALSE(tiles.empty());
+
+    const int NX = tiles[0].nxg;
+    const int NY = tiles[0].nyg;
+    std::vector<char> covered((size_t)NX * NY, 0);
+
+    for (const auto& t : tiles) {
+        for (int j = 0; j < t.ny; ++j) {
+            for (int i = 0; i < t.nx; ++i) {
+                const int gi = t.x_off + i;
+                const int gj = t.y_off + j;
+                ASSERT_GE(gi, 0);
+                ASSERT_LT(gi, NX);
+                ASSERT_GE(gj, 0);
+                ASSERT_LT(gj, NY);
+                size_t idx = (size_t)gj * NX + gi;
+                ASSERT_EQ(covered[idx], 0) << "overlap at (" << gi << "," << gj << ")";
+                covered[idx] = 1;
+            }
+        }
+    }
+
+    for (size_t k = 0; k < covered.size(); ++k) {
+        ASSERT_EQ(covered[k], 1) << "uncovered cell at linear index " << k;
+    }
+}
+
+#ifdef HAS_NETCDF
+TEST(Integration_Main, CSV_vs_NetCDF_Equivalence_Global) {
+    fs::remove_all("outputs");
+    fs::create_directories("outputs/snapshots");
+
+    std::ostringstream cmd_csv;
+    cmd_csv << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+            << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=40 --ny=24 --dx=1 --dy=1"
+            << " --D=0.0 --vx=0 --vy=0"
+            << " --dt=0.1 --steps=1 --out_every=1"
+            << " --bc=periodic"
+            << " --ic.mode=preset --ic.preset=gaussian_hotspot --ic.A=1.0 --ic.sigma_frac=0.12"
+            << " --output.format=csv";
+    ASSERT_EQ(run_cmd(cmd_csv.str()), 0);
+
+    fs::create_directories("outputs/snap_csv");
+    fs::rename("outputs/snapshots", "outputs/snap_csv");
+    fs::create_directories("outputs/snapshots");
+
+    std::ostringstream cmd_nc;
+    cmd_nc << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+           << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=40 --ny=24 --dx=1 --dy=1"
+           << " --D=0.0 --vx=0 --vy=0"
+           << " --dt=0.1 --steps=1 --out_every=1"
+           << " --bc=periodic"
+           << " --ic.mode=preset --ic.preset=gaussian_hotspot --ic.A=1.0 --ic.sigma_frac=0.12"
+           << " --output.format=netcdf";
+    ASSERT_EQ(run_cmd(cmd_nc.str()), 0);
+
+    auto Ucsv = assemble_global_csv_snapshot_from("outputs/snap_csv", 0);
+    auto Unc = assemble_global_nc_snapshot_from("outputs/snapshots", 0, "u");
+
+    ASSERT_EQ(Ucsv.size(), Unc.size());
+    ASSERT_EQ(Ucsv[0].size(), Unc[0].size());
+
+    for (size_t j = 0; j < Ucsv.size(); ++j) {
+        for (size_t i = 0; i < Ucsv[0].size(); ++i) {
+            double diff = std::abs(Ucsv[j][i] - Unc[j][i]);
+            ASSERT_LE(diff, 1e-12) << "mismatch at (" << i << "," << j << ")";
+        }
+    }
+}
+#endif

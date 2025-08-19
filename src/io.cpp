@@ -6,6 +6,8 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 
@@ -334,6 +336,8 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
 
 void write_field_csv(const Field& f, const std::string& filename) {
     std::ofstream ofs(filename);
+    ofs.setf(std::ios::scientific);
+    ofs << std::setprecision(std::numeric_limits<double>::max_digits10);
     for (int j = 0; j < f.ny_total(); ++j) {
         for (int i = 0; i < f.nx_total(); ++i) {
             ofs << f.at(i, j);
