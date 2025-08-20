@@ -2,7 +2,7 @@
 
 #include "stability.hpp"
 
-TEST(StabilityTest, ReturnsPositiveLimit) {
+TEST(Unit_Stability, ReturnsPositiveLimit) {
     double dx = 1.0, dy = 1.0;
     double vx = 0.5, vy = 0.5;
     double D = 0.1;
@@ -10,7 +10,7 @@ TEST(StabilityTest, ReturnsPositiveLimit) {
     EXPECT_GT(limit, 0.0);
 }
 
-TEST(StabilityTest, LowerWithHigherVelocity) {
+TEST(Unit_Stability, LowerWithHigherVelocity) {
     double dx = 1.0, dy = 1.0;
     double D = 0.1;
     double low_v = safe_dt(dx, dy, 0.5, 0.5, D);
@@ -18,7 +18,7 @@ TEST(StabilityTest, LowerWithHigherVelocity) {
     EXPECT_LT(high_v, low_v);
 }
 
-TEST(StabilityTest, LowerWithHigherDiffusion) {
+TEST(Unit_Stability, LowerWithHigherDiffusion) {
     double dx = 1.0, dy = 1.0;
     double vx = 0.5, vy = 0.5;
     double low_D = safe_dt(dx, dy, vx, vy, 0.1);

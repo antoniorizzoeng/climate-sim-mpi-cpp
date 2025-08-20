@@ -8,7 +8,6 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 set(MPI_TEST_PROCS 4 CACHE STRING "MPI ranks used for tests" FORCE)
-
 if(NOT MPIEXEC_EXECUTABLE)
   set(MPIEXEC_EXECUTABLE mpirun)
 endif()
@@ -26,60 +25,8 @@ include(CTest)
 enable_testing()
 include(GoogleTest)
 
-add_library(test_common INTERFACE)
-target_include_directories(test_common INTERFACE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
-
-# ------------------------------
-# Unit tests
-# ------------------------------
-add_executable(test_init test_init.cpp)
-target_link_libraries(test_init PRIVATE gtest_main core)
-add_test(NAME init_suite COMMAND test_init)
-
-add_executable(test_io test_io.cpp)
-target_link_libraries(test_io PRIVATE gtest_main core yaml-cpp)
-add_test(NAME io_suite COMMAND test_io)
-target_compile_definitions(test_io PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/configs")
-
-add_executable(test_halo test_halo.cpp)
-target_link_libraries(test_halo PRIVATE core gtest_main MPI::MPI_CXX)
-add_test(NAME halo_mpi
-  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
-          $<TARGET_FILE:test_halo>)
-
-add_executable(test_field test_field.cpp)
-target_link_libraries(test_field PRIVATE test_common core GTest::gtest GTest::gtest_main)
-gtest_discover_tests(test_field)
-
-add_executable(test_diffusion test_diffusion.cpp)
-target_link_libraries(test_diffusion PRIVATE test_common core GTest::gtest GTest::gtest_main)
-gtest_discover_tests(test_diffusion)
-
-add_executable(test_stability test_stability.cpp)
-target_link_libraries(test_stability PRIVATE core gtest_main)
-add_test(NAME stability COMMAND test_stability)
-
-add_executable(test_decomp_mpi test_decomp_mpi.cpp)
-target_link_libraries(test_decomp_mpi PRIVATE core gtest_main MPI::MPI_CXX)
-add_test(NAME decomp_mpi
-  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
-          $<TARGET_FILE:test_decomp_mpi>)
-
-add_executable(test_boundary test_boundary.cpp)
-target_link_libraries(test_boundary PRIVATE core gtest_main MPI::MPI_CXX)
-add_test(NAME boundary_single_rank COMMAND $<TARGET_FILE:test_boundary>)
-
-# ------------------------------
-# Integration tests (full binary + scripts)
-# ------------------------------
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
-add_executable(test_integration test_integration.cpp)
-target_include_directories(test_integration PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(test_integration PRIVATE core GTest::gtest GTest::gtest_main)
-
-target_compile_definitions(test_integration PRIVATE
+set(_IT_COMPILE_DEFS
   CLIMATE_SIM_EXE="$<TARGET_FILE:climate_sim>"
   PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
   SCRIPTS_DIR="${CMAKE_SOURCE_DIR}/scripts"
@@ -89,12 +36,93 @@ target_compile_definitions(test_integration PRIVATE
   INTEGRATION_MPI_PROCS=${MPI_TEST_PROCS}
 )
 
+function(apply_mpi_wrapper target)
+  set_property(TARGET ${target} PROPERTY
+    CROSSCOMPILING_EMULATOR
+      ${MPIEXEC_EXECUTABLE}
+      ${MPIEXEC_PREFLAGS}
+      ${MPIEXEC_NUMPROC_FLAG} ${MPI_TEST_PROCS}
+  )
+endfunction()
+
+# ------------------------------
+# Unit tests
+# ------------------------------
+
+add_library(test_common INTERFACE)
+target_include_directories(test_common INTERFACE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
+
+add_executable(test_init unit/test_init.cpp)
+target_link_libraries(test_init PRIVATE core GTest::gtest GTest::gtest_main)
+gtest_discover_tests(test_init DISCOVERY_TIMEOUT 30)
+
+add_executable(test_io unit/test_io.cpp)
+target_link_libraries(test_io PRIVATE core yaml-cpp GTest::gtest GTest::gtest_main)
+target_compile_definitions(test_io PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/configs")
+gtest_discover_tests(test_io DISCOVERY_TIMEOUT 30)
+
+add_executable(test_field unit/test_field.cpp)
+target_link_libraries(test_field PRIVATE test_common core GTest::gtest GTest::gtest_main)
+gtest_discover_tests(test_field DISCOVERY_TIMEOUT 30)
+
+add_executable(test_diffusion unit/test_diffusion.cpp)
+target_link_libraries(test_diffusion PRIVATE test_common core GTest::gtest GTest::gtest_main)
+gtest_discover_tests(test_diffusion DISCOVERY_TIMEOUT 30)
+
+add_executable(test_stability unit/test_stability.cpp)
+target_link_libraries(test_stability PRIVATE core GTest::gtest GTest::gtest_main)
+gtest_discover_tests(test_stability DISCOVERY_TIMEOUT 30)
+
+add_executable(test_boundary unit/test_boundary.cpp)
+target_link_libraries(test_boundary PRIVATE core GTest::gtest GTest::gtest_main)
+gtest_discover_tests(test_boundary DISCOVERY_TIMEOUT 30)
+
+add_executable(test_decomp_mpi unit/test_decomp_mpi.cpp)
+target_link_libraries(test_decomp_mpi PRIVATE core GTest::gtest GTest::gtest_main MPI::MPI_CXX)
+apply_mpi_wrapper(test_decomp_mpi)
+gtest_discover_tests(test_decomp_mpi DISCOVERY_TIMEOUT 60)
+
+add_executable(test_halo unit/test_halo.cpp)
+target_link_libraries(test_halo PRIVATE core GTest::gtest GTest::gtest_main MPI::MPI_CXX)
+apply_mpi_wrapper(test_halo)
+gtest_discover_tests(test_halo DISCOVERY_TIMEOUT 60)
+
+# ------------------------------
+# Integration tests (helpers + per-test exes)
+# ------------------------------
+
+add_library(integration_helpers STATIC
+  integration/integration_helpers.cpp
+)
+target_include_directories(integration_helpers PUBLIC
+  ${CMAKE_CURRENT_LIST_DIR}/integration
+  ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(integration_helpers PUBLIC core MPI::MPI_CXX)
+target_compile_definitions(integration_helpers PUBLIC ${_IT_COMPILE_DEFS})
+
+# Propagate HAS_NETCDF from core (if present)
 get_target_property(_core_defs core COMPILE_DEFINITIONS)
 if(_core_defs)
-  list(FIND _core_defs "HAS_NETCDF" _has_nc_idx)
-  if(NOT _has_nc_idx EQUAL -1)
-    target_compile_definitions(test_integration PRIVATE HAS_NETCDF=1)
+  list(FIND _core_defs "HAS_NETCDF" _has_nc_idx_helpers)
+  if(NOT _has_nc_idx_helpers EQUAL -1)
+    target_compile_definitions(integration_helpers PUBLIC HAS_NETCDF=1)
   endif()
 endif()
 
-gtest_discover_tests(test_integration DISCOVERY_TIMEOUT 30)
+function(add_it name src)
+  add_executable(${name} ${src})
+  target_link_libraries(${name} PRIVATE integration_helpers GTest::gtest GTest::gtest_main)
+  target_compile_definitions(${name} PRIVATE ${_IT_COMPILE_DEFS})
+  gtest_discover_tests(${name} DISCOVERY_TIMEOUT 60)
+endfunction()
+
+add_it(integration_constant_zero_csv integration/integration_constant_zero_csv.cpp)
+add_it(integration_gaussian_csv      integration/integration_gaussian_csv.cpp)
+add_it(integration_ic_binary         integration/integration_ic_binary.cpp)
+add_it(integration_netcdf_output     integration/integration_netcdf_output.cpp)
+add_it(integration_diffusion         integration/integration_diffusion.cpp)
+add_it(integration_advection         integration/integration_advection.cpp)
+add_it(integration_decomp_coverage   integration/integration_decomp_coverage.cpp)
+add_it(integration_csv_vs_nc         integration/integration_csv_vs_nc.cpp)

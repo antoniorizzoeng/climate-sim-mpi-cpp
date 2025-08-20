@@ -30,7 +30,7 @@ static std::pair<double, double> minmax(const Field& f) {
     return {mn, mx};
 }
 
-TEST(Init_IC, ConstantZeroPreset) {
+TEST(Unit_Init_IC, ConstantZeroPreset) {
     auto dec = make_decomp(16, 16, 16, 16);
     Field u(dec.nx_local, dec.ny_local, 1, 1.0, 1.0);
     u.fill(0.0);
@@ -46,7 +46,7 @@ TEST(Init_IC, ConstantZeroPreset) {
     EXPECT_DOUBLE_EQ(mx, 0.0);
 }
 
-TEST(Init_IC, GaussianHotspotPreset) {
+TEST(Unit_Init_IC, GaussianHotspotPreset) {
     auto dec = make_decomp(64, 64, 64, 64);
     Field u(dec.nx_local, dec.ny_local, 1, 1.0, 1.0);
     u.fill(0.0);
