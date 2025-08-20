@@ -14,7 +14,7 @@ static void zero_ghosts(Field& f) {
     }
 }
 
-TEST(Diffusion, SingleImpulseOneStep) {
+TEST(Unit_Diffusion, SingleImpulseOneStep) {
     Field u(3, 3, 1, 1.0, 1.0);
     Field v(3, 3, 1, 1.0, 1.0);
     u.at(2, 2) = 1.0;

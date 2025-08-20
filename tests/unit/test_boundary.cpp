@@ -5,7 +5,7 @@
 #include "decomp.hpp"
 #include "field.hpp"
 
-TEST(Boundary, DirichletAndNeumannSingleRank) {
+TEST(Unit_Boundary, DirichletAndNeumannSingleRank) {
     int init = 0;
     MPI_Initialized(&init);
     if (!init) {

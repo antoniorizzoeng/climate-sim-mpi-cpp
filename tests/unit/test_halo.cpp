@@ -5,7 +5,7 @@
 #include "field.hpp"
 #include "halo.hpp"
 
-TEST(HaloExchange, AdaptiveFaces) {
+TEST(Unit_Halo, AdaptiveFaces) {
     int init = 0;
     MPI_Initialized(&init);
     if (!init) {
