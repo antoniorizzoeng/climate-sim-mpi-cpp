@@ -29,7 +29,12 @@ jobs:
           python-version: '3.11'
       
       - name: Install NetCDF
-        run: sudo apt-get update && sudo apt-get install -y libnetcdf-dev netcdf-bin
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnetcdf-dev \
+            libnetcdf-c++4-dev \
+            netcdf-bin
 
       - name: Install Python deps for tests
         run: |
