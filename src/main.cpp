@@ -105,17 +105,19 @@ int main(int argc, char** argv) {
     for (int n = 0; n < cfg.steps; ++n) {
         double ts = MPI_Wtime();
 
-        if (cfg.output_format == "netcdf" || cfg.output_format == "nc") {
-            auto fname = snapshot_filename_nc("outputs/snapshots", n, world_rank);
-            if (!write_field_netcdf(u, fname, dec)) {
-                if (world_rank == 0)
-                    std::cerr << "[warn] Built without NetCDF; falling back to CSV\n";
-                auto fcsv = snapshot_filename("outputs/snapshots", n, world_rank);
-                write_field_csv(u, fcsv);
+        if (n % cfg.out_every == 0 || n == 0) {
+            if (cfg.output_format == "netcdf" || cfg.output_format == "nc") {
+                auto fname = snapshot_filename_nc("outputs/snapshots", n, world_rank);
+                if (!write_field_netcdf(u, fname, dec)) {
+                    if (world_rank == 0)
+                        std::cerr << "[warn] Built without NetCDF; falling back to CSV\n";
+                    auto fcsv = snapshot_filename("outputs/snapshots", n, world_rank);
+                    write_field_csv(u, fcsv);
+                }
+            } else {
+                auto fname = snapshot_filename("outputs/snapshots", n, world_rank);
+                write_field_csv(u, fname);
             }
-        } else {
-            auto fname = snapshot_filename("outputs/snapshots", n, world_rank);
-            write_field_csv(u, fname);
         }
 
         exchange_halos(u, dec, MPI_COMM_WORLD);
