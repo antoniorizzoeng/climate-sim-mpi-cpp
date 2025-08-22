@@ -53,47 +53,47 @@ add_library(test_common INTERFACE)
 target_include_directories(test_common INTERFACE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(test_common INTERFACE MPI::MPI_CXX)
 
-add_executable(test_init unit/test_init.cpp)
+add_executable(test_init simulation/unit/test_init.cpp)
 target_link_libraries(test_init PRIVATE core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_init DISCOVERY_TIMEOUT 30)
 
-add_executable(test_io unit/test_io.cpp)
+add_executable(test_io simulation/unit/test_io.cpp)
 target_link_libraries(test_io PRIVATE core yaml-cpp GTest::gtest GTest::gtest_main)
 target_compile_definitions(test_io PRIVATE CONFIGS_DIR="${CMAKE_SOURCE_DIR}/configs")
 gtest_discover_tests(test_io DISCOVERY_TIMEOUT 30)
 
-add_executable(test_field unit/test_field.cpp)
+add_executable(test_field simulation/unit/test_field.cpp)
 target_link_libraries(test_field PRIVATE test_common core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_field DISCOVERY_TIMEOUT 30)
 
-add_executable(test_diffusion unit/test_diffusion.cpp)
+add_executable(test_diffusion simulation/unit/test_diffusion.cpp)
 target_link_libraries(test_diffusion PRIVATE test_common core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_diffusion DISCOVERY_TIMEOUT 30)
 
-add_executable(test_stability unit/test_stability.cpp)
+add_executable(test_stability simulation/unit/test_stability.cpp)
 target_link_libraries(test_stability PRIVATE core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_stability DISCOVERY_TIMEOUT 30)
 
-add_executable(test_boundary unit/test_boundary.cpp)
+add_executable(test_boundary simulation/unit/test_boundary.cpp)
 target_link_libraries(test_boundary PRIVATE core GTest::gtest GTest::gtest_main)
 gtest_discover_tests(test_boundary DISCOVERY_TIMEOUT 30)
 
-add_executable(test_decomp_mpi unit/test_decomp_mpi.cpp)
+add_executable(test_decomp_mpi simulation/unit/test_decomp_mpi.cpp)
 target_link_libraries(test_decomp_mpi PRIVATE core GTest::gtest GTest::gtest_main MPI::MPI_CXX)
 apply_mpi_wrapper(test_decomp_mpi)
 gtest_discover_tests(test_decomp_mpi DISCOVERY_TIMEOUT 60)
 
-add_executable(test_halo unit/test_halo.cpp)
+add_executable(test_halo simulation/unit/test_halo.cpp)
 target_link_libraries(test_halo PRIVATE core GTest::gtest GTest::gtest_main MPI::MPI_CXX)
 apply_mpi_wrapper(test_halo)
 gtest_discover_tests(test_halo DISCOVERY_TIMEOUT 60)
 
 # ------------------------------
-# Integration tests (helpers + per-test exes)
+# Integration tests
 # ------------------------------
 
 add_library(integration_helpers STATIC
-  integration/integration_helpers.cpp
+  simulation/integration/integration_helpers.cpp
 )
 target_include_directories(integration_helpers PUBLIC
   ${CMAKE_CURRENT_LIST_DIR}/integration
@@ -102,7 +102,6 @@ target_include_directories(integration_helpers PUBLIC
 target_link_libraries(integration_helpers PUBLIC core MPI::MPI_CXX)
 target_compile_definitions(integration_helpers PUBLIC ${_IT_COMPILE_DEFS})
 
-# Propagate HAS_NETCDF from core (if present)
 get_target_property(_core_defs core COMPILE_DEFINITIONS)
 if(_core_defs)
   list(FIND _core_defs "HAS_NETCDF" _has_nc_idx_helpers)
@@ -118,13 +117,29 @@ function(add_it name src)
   gtest_discover_tests(${name} DISCOVERY_TIMEOUT 60)
 endfunction()
 
-add_it(integration_constant_zero_csv integration/integration_constant_zero_csv.cpp)
-add_it(integration_gaussian_csv      integration/integration_gaussian_csv.cpp)
-add_it(integration_ic_binary         integration/integration_ic_binary.cpp)
-add_it(integration_netcdf_output     integration/integration_netcdf_output.cpp)
-add_it(integration_diffusion         integration/integration_diffusion.cpp)
-add_it(integration_advection         integration/integration_advection.cpp)
-add_it(integration_decomp_coverage   integration/integration_decomp_coverage.cpp)
-add_it(integration_csv_vs_nc         integration/integration_csv_vs_nc.cpp)
-add_it(integration_boundary_error    integration/integration_boundary_error.cpp)
-add_it(integration_ic_netcdf         integration/integration_ic_netcdf.cpp)
+add_it(integration_constant_zero_csv simulation/integration/integration_constant_zero_csv.cpp)
+add_it(integration_gaussian_csv      simulation/integration/integration_gaussian_csv.cpp)
+add_it(integration_ic_binary         simulation/integration/integration_ic_binary.cpp)
+add_it(integration_netcdf_output     simulation/integration/integration_netcdf_output.cpp)
+add_it(integration_diffusion         simulation/integration/integration_diffusion.cpp)
+add_it(integration_advection         simulation/integration/integration_advection.cpp)
+add_it(integration_decomp_coverage   simulation/integration/integration_decomp_coverage.cpp)
+add_it(integration_csv_vs_nc         simulation/integration/integration_csv_vs_nc.cpp)
+add_it(integration_boundary_error    simulation/integration/integration_boundary_error.cpp)
+add_it(integration_ic_netcdf         simulation/integration/integration_ic_netcdf.cpp)
+
+# ------------------------------
+# Visualization pytests
+# ------------------------------
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+add_test(
+  NAME py_visualization
+  COMMAND ${Python3_EXECUTABLE} -m pytest tests/visualization
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+set_tests_properties(py_visualization PROPERTIES
+  ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR};MPLBACKEND=Agg"
+  LABELS "python;visualization"
+)
