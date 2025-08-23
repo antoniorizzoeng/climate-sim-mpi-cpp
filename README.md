@@ -48,7 +48,3 @@ Run strong/weak scaling benchmarks:
 ```bash
 ./scripts/run_benchmark.sh
 ```
-
-## License
-
-This project is licensed under the MIT License.
