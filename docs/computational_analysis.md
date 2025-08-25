@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Computational Analysis
+nav_order: 3
 ---
+
 {% include mathjax.html %}
 # Computational Analysis
 

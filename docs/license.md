@@ -1,12 +1,13 @@
 ---
-layout: default
+title: License
+nav_order: 6
 ---
 
 # License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
-- The full text lives at [`LICENSE`](../LICENSE) in the repository.
+- The full text lives at [`LICENSE`](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/blob/main/LICENSE) in the repository.
 - In short: any network-facing use that runs modified versions must offer the source code
   of those modifications to users. Commercial use is allowed by the AGPL, but it strongly
   incentivizes open-source reciprocity and is generally avoided by proprietary consumers.
