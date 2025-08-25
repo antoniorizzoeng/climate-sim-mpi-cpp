@@ -16,7 +16,7 @@ The simulation was run on 4 MPI ranks with periodic BCs and saved every 10 steps
 ## Tips for photogenic runs
 
 - Use `nx=ny=512` for smooth visuals.
-- Keep `D` around `0.03–0.07` so the hotspot fades but doesn’t vanish too fast.
+- Keep `D` around `0.3–0.7` so the hotspot fades but doesn’t vanish too fast.
 - Small rightward flow like `vx=0.3–0.6` keeps motion interesting without smearing.
 - Set `out_every=10–20` and `fps=20–30` for a pleasing pace.
 

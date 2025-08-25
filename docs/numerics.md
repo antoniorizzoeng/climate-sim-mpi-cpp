@@ -1,6 +1,8 @@
 ---
-layout: default
+title: Numerics
+nav_order: 4
 ---
+
 {% include mathjax.html %}
 
 # Numerics
@@ -168,7 +170,10 @@ $$
 $$
 
 - Start values:
-  - $\Delta = 1.0$, $D = 0.1$, $|\mathbf{v}| \le 1.0$, $\Delta t = 0.1$ (check CFL in code).
+    $$
+    \Delta = 1.0,\quad D = 0.1,\quad |\mathbf{v}| \le 1.0,\quad \Delta t = 0.1
+    $$
+    (check CFL in code).
 
 ---
 

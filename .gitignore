@@ -44,3 +44,9 @@ __pycache__/
 /inputs/
 /outputs/
 /bench/results/
+
+#gem
+Gemfile
+_site/
+.bundle/
+Gemfile.lock
