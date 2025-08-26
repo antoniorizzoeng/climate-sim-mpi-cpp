@@ -8,7 +8,8 @@ from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
 
 from .io import load_global, list_available_steps
 
-__all__ = ["save_frame", "save_animation"]
+__all__ = ["imshow_field", "compare_fields", "animate_from_outputs"]
+
 
 def imshow_field(
     U: np.ndarray,
@@ -23,7 +24,7 @@ def imshow_field(
     save: Optional[str] = None,
 ):
     if ax is None:
-        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        fig, ax = plt.subplots(figsize=(6, 4))
     else:
         fig = ax.figure
 
@@ -34,10 +35,10 @@ def imshow_field(
     if title:
         ax.set_title(title)
     if colorbar:
-        fig.colorbar(im, ax=ax, shrink=0.85)
+        fig.colorbar(im, ax=ax, shrink=0.85, pad=0.02)
 
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=150, bbox_inches="tight")
     if show:
         plt.show()
 
@@ -65,7 +66,7 @@ def compare_fields(
         vmax = np.nanmax([A.max(), B.max()]) if vmax is None else vmax
 
     ncols = 3 if show_diff else 2
-    fig, axes = plt.subplots(1, ncols, figsize=(4 * ncols + 1, 4), constrained_layout=True)
+    fig, axes = plt.subplots(1, ncols, figsize=(4 * ncols + 1, 4))
 
     if ncols == 2:
         axA, axB = axes
@@ -85,26 +86,27 @@ def compare_fields(
     axB.set_ylabel("y")
 
     if share_colorbar:
-        cbar = fig.colorbar(imB, ax=[axA, axB], shrink=0.85)
+        cbar = fig.colorbar(imB, ax=[axA, axB], shrink=0.85, pad=0.02)
         cbar.set_label("value")
     else:
-        fig.colorbar(imA, ax=axA, shrink=0.85)
-        fig.colorbar(imB, ax=axB, shrink=0.85)
+        fig.colorbar(imA, ax=axA, shrink=0.85, pad=0.02)
+        fig.colorbar(imB, ax=axB, shrink=0.85, pad=0.02)
 
     if show_diff:
         D = B - A
         if diff_vlim is None:
             m = np.nanmax(np.abs(D))
             diff_vlim = 1e-16 if m == 0 else m
-        imD = axD.imshow(D, origin="lower", cmap=diff_cmap, vmin=-diff_vlim, vmax=diff_vlim)
+        imD = axD.imshow(D, origin="lower", cmap=diff_cmap,
+                         vmin=-diff_vlim, vmax=diff_vlim)
         axD.set_aspect("equal")
         axD.set_title("B - A")
         axD.set_xlabel("x")
         axD.set_ylabel("y")
-        fig.colorbar(imD, ax=axD, shrink=0.85)
+        fig.colorbar(imD, ax=axD, shrink=0.85, pad=0.02)
 
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=150, bbox_inches="tight")
     if show:
         plt.show()
 
@@ -125,11 +127,14 @@ def animate_from_outputs(
     save: Optional[str] = None,
     writer: Optional[str] = None,
     title_prefix: str = "timestep",
+    show: bool = False,
 ):
     if steps is None:
         steps = list_available_steps(base_outputs_dir, fmt=fmt)
     if not steps:
-        raise RuntimeError(f"No steps found in {base_outputs_dir}/snapshots for fmt='{fmt}'")
+        raise RuntimeError(
+            f"No steps found in {base_outputs_dir}/snapshots for fmt='{fmt}'"
+        )
 
     U0 = load_global(base_outputs_dir, steps[0], fmt=fmt, var=var)
     if vmin is None or vmax is None:
@@ -139,14 +144,14 @@ def animate_from_outputs(
         vmin = min(vals) if vmin is None else vmin
         vmax = max(vals) if vmax is None else vmax
 
-    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(6, 4))
     im = ax.imshow(U0, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
     ax.set_aspect("equal")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ttl = ax.set_title(f"{title_prefix}: {steps[0]}")
 
-    fig.colorbar(im, ax=ax, shrink=0.85)
+    fig.colorbar(im, ax=ax, shrink=0.85, pad=0.02)
 
     def _update(frame_idx: int):
         step = steps[frame_idx]
@@ -179,5 +184,8 @@ def animate_from_outputs(
             anim.save(save, writer=PillowWriter(fps=fps))
         else:
             raise ValueError("writer must be 'ffmpeg' or 'pillow'")
+
+    if show:
+        plt.show()
 
     return anim, fig, ax
