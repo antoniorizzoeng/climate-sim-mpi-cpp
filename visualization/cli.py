@@ -90,7 +90,7 @@ def cmd_watch(args):
     import matplotlib.pyplot as plt
     from . import io
 
-    base = args.outputs
+    base = args.dir
     fmt = args.fmt
     var = args.var
     interval = args.interval
@@ -144,6 +144,35 @@ def cmd_watch(args):
             time.sleep(interval)
     except KeyboardInterrupt:
         pass
+
+def cmd_interactive(args):
+    import matplotlib.pyplot as plt
+    from . import io
+
+    steps = io.list_available_steps(args.dir, fmt=args.fmt)
+    if not steps:
+        raise SystemExit("No snapshots found")
+
+    idx = 0
+    U = io.load_global(args.dir, steps[idx], fmt=args.fmt, var=args.var)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(U, origin="lower", cmap=args.cmap)
+    ttl = ax.set_title(f"Step {steps[idx]}")
+
+    def on_key(event):
+        nonlocal idx
+        if event.key == "right":
+            idx = min(idx + 1, len(steps) - 1)
+        elif event.key == "left":
+            idx = max(idx - 1, 0)
+        U = io.load_global(args.dir, steps[idx], fmt=args.fmt, var=args.var)
+        im.set_data(U)
+        ttl.set_text(f"Step {steps[idx]}")
+        fig.canvas.draw_idle()
+
+    fig.canvas.mpl_connect("key_press_event", on_key)
+    plt.show()
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -213,7 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # watch
     p_w =sub.add_parser("watch", help="Live view: poll outputs/snapshots and redraw on new steps")
-    p_w.add_argument("--outputs", default="outputs", help="Base outputs dir (contains rank_layout.csv and snapshots/)")
+    p_w.add_argument("--dir", default="outputs", help="Base outputs dir (contains rank_layout.csv and snapshots/)")
     p_w.add_argument("--fmt", choices=["csv", "nc"], default="csv", help="Snapshot format to read")
     p_w.add_argument("--var", default="u", help="NetCDF variable name (when --fmt=nc)")
     p_w.add_argument("--interval", type=float, default=0.5, help="Polling interval in seconds")
@@ -225,6 +254,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_w.add_argument("--tight", action="store_true", help="Apply tight_layout on each draw")
     p_w.add_argument("--redraw-same", action="store_true", help="Redraw even if the latest step didn’t change")
     p_w.set_defaults(func=cmd_watch)
+
+    #interactive
+    pi = sub.add_parser("interactive", help="Interactive navigation of outputs")
+    pi.add_argument("--dir", required=True)
+    pi.add_argument("--fmt", choices=["csv", "nc"], default="csv")
+    pi.add_argument("--var", default="u")
+    pi.add_argument("--cmap", default="viridis")
+    pi.set_defaults(func=cmd_interactive)
 
     return p
 

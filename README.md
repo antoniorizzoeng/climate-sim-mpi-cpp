@@ -105,13 +105,16 @@ ic:
 
 ```bash
 # Rebuild and save single frame
-python -m visualization.cli frame outputs --step 10 --fmt csv --save frame.png
+python -m visualization.cli show --dir outputs --step 10 --fmt csv --save frame.png
 
 # Animate all steps into a GIF
-python -m visualization.cli animate outputs --fmt csv --save anim.gif --writer pillow
+python -m visualization.cli animate --dir outputs --fmt csv --save anim.gif --writer pillow
 
 # Watch live simulation outputs
-python -m visualization.cli watch outputs --fmt csv --interval 1.0
+python -m visualization.cli watch --dir outputs --fmt csv --interval 1.0
+
+# Interactive simulation viz
+python -m visualization.cli interactive --dir outputs --fmt csv
 ```
 
 ### Python API

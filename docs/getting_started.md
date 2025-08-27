@@ -47,22 +47,28 @@ ic:
 Single frame:
 
 ```bash
-python -m visualization.cli frame outputs --fmt nc --step 400 --save demo_frame.png
+python -m visualization.cli frame --dir outputs --fmt nc --step 400 --save demo_frame.png
 ```
 
 Animation (MP4 with ffmpeg available, else GIF with Pillow):
 
 ```bash
 # MP4
-python -m visualization.cli animate outputs --fmt nc --fps 24 --save demo.mp4
+python -m visualization.cli animate --dir outputs --fmt nc --fps 24 --save demo.mp4
 # GIF
-python -m visualization.cli animate outputs --fmt nc --fps 12 --save demo.gif --writer pillow
+python -m visualization.cli animate --dir outputs --fmt nc --fps 12 --save demo.gif --writer pillow
 ```
 
 Live watch while the simulation is running:
 
 ```bash
-python -m visualization.cli watch outputs --fmt nc --interval 0.5
+python -m visualization.cli watch --dir outputs --fmt nc --interval 0.5
+```
+
+Interactive view (use arrow keys to select the step to analyze)
+
+```bash
+python -m visualization.cli watch --dir outputs --fmt nc --interval 0.5
 ```
 
 ---
