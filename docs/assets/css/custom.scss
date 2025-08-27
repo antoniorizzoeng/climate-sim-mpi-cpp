@@ -1,0 +1,15 @@
+
+// Custom style overrides for Just the Docs
+
+// Accent color
+$link-color: #007acc;
+
+// Heading font weight
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+}
+
+// Rounded images
+img {
+  border-radius: 8px;
+}

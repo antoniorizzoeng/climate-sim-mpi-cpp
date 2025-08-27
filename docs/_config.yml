@@ -1,8 +1,28 @@
-theme: minima
+title: Climate Sim
+description: "High-performance climate simulation with MPI in C++"
+remote_theme: just-the-docs/just-the-docs
+
+# Enable kramdown with MathJax
 markdown: kramdown
 kramdown:
   math_engine: mathjax
   syntax_highlighter: rouge
+
+# Plugins
 plugins:
   - jekyll-seo-tag
   - jekyll-feed
+
+# Just the Docs settings
+search_enabled: true
+color_scheme: light
+
+# Navigation order and structure
+nav_order: 1
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Computational Analysis: computational_analysis.md
+  - Numerics: numerics.md
+  - Getting Started: getting_started.md
+  - License: license.md

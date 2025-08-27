@@ -1,5 +1,6 @@
 ---
-layout: default
+title: Getting Started
+nav_order: 5
 ---
 
 # Getting Started
