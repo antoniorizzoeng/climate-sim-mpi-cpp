@@ -6,7 +6,10 @@
 
 High-performance 2D climate field simulation with MPI (C++), including Python-based visualization tools.
 
-![Simulation demo](docs/demo.gif)
+<p align="center">
+  <img src="docs/demo.gif" alt="Simulation demo (GIF)" width="45%"/>
+  <img src="docs/demo2.png" alt="Simulation demo (PNG)" width="45%"/>
+</p>
 
 ## Features
 
