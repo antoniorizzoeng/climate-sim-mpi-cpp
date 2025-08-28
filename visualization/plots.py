@@ -4,11 +4,55 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from .io import load_global, list_available_steps
 
 __all__ = ["imshow_field", "compare_fields", "animate_from_outputs"]
+
+
+def add_overlays(ax, U,
+                 show_minmax=False,
+                 show_rankgrid=False,
+                 show_rankboxes=False,
+                 rank_layout=None):
+    if show_minmax:
+        umin, umax = float(np.nanmin(U)), float(np.nanmax(U))
+        ax.text(0.99, 0.99, f"min={umin:.2f}\nmax={umax:.2f}",
+                transform=ax.transAxes, ha="right", va="top",
+                fontsize=8, color="white",
+                bbox=dict(facecolor="black", alpha=0.5, edgecolor="none"))
+
+    if (show_rankgrid or show_rankboxes) and rank_layout is not None:
+        for (rank, x0, y0, nx, ny) in rank_layout:
+            cx, cy = x0 + nx / 2, y0 + ny / 2
+            if show_rankgrid:
+                ax.text(cx, cy, str(rank), color="red",
+                        ha="center", va="center", fontsize=8,
+                        bbox=dict(facecolor="white", alpha=0.3, edgecolor="none"))
+            if show_rankboxes:
+                rect = patches.Rectangle(
+                    (x0, y0), nx, ny,
+                    linewidth=0.8,
+                    edgecolor="black",
+                    facecolor="none",
+                    alpha=0.6,
+                )
+                ax.add_patch(rect)
+
+
+def _imshow_with_colorbar(ax, U, cmap, vmin, vmax):
+    im = ax.imshow(U, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cb = ax.figure.colorbar(im, cax=cax)
+    return im, cb
 
 
 def imshow_field(
@@ -22,20 +66,25 @@ def imshow_field(
     ax: Optional[plt.Axes] = None,
     show: bool = False,
     save: Optional[str] = None,
+    overlay_minmax: bool = False,
+    overlay_rankgrid: bool = False,
+    overlay_rankboxes: bool = False,
+    rank_layout=None,
 ):
     if ax is None:
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(figsize=(6, 6))
     else:
         fig = ax.figure
 
-    im = ax.imshow(U, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax, extent=extent)
-    ax.set_aspect("equal")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
+    im, _ = _imshow_with_colorbar(ax, U, cmap, vmin, vmax)
     if title:
         ax.set_title(title)
-    if colorbar:
-        fig.colorbar(im, ax=ax, shrink=0.85, pad=0.02)
+
+    add_overlays(ax, U,
+                 show_minmax=overlay_minmax,
+                 show_rankgrid=overlay_rankgrid,
+                 show_rankboxes=overlay_rankboxes,
+                 rank_layout=rank_layout)
 
     if save:
         fig.savefig(save, dpi=150, bbox_inches="tight")
@@ -58,6 +107,8 @@ def compare_fields(
     diff_vlim: Optional[float] = None,
     show: bool = False,
     save: Optional[str] = None,
+    overlay_minmax: bool = False,
+    overlay_rankboxes: bool = False,
 ):
     assert A.shape == B.shape, "Fields must have the same shape"
 
@@ -66,44 +117,31 @@ def compare_fields(
         vmax = np.nanmax([A.max(), B.max()]) if vmax is None else vmax
 
     ncols = 3 if show_diff else 2
-    fig, axes = plt.subplots(1, ncols, figsize=(4 * ncols + 1, 4))
+    fig, axes = plt.subplots(1, ncols, figsize=(6 * ncols, 6))
 
     if ncols == 2:
         axA, axB = axes
     else:
         axA, axB, axD = axes
 
-    imA = axA.imshow(A, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
-    axA.set_aspect("equal")
+    imA, _ = _imshow_with_colorbar(axA, A, cmap, vmin, vmax)
     axA.set_title(titles[0])
-    axA.set_xlabel("x")
-    axA.set_ylabel("y")
+    add_overlays(axA, A, show_minmax=overlay_minmax,
+                 show_rankboxes=overlay_rankboxes)
 
-    imB = axB.imshow(B, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
-    axB.set_aspect("equal")
+    imB, _ = _imshow_with_colorbar(axB, B, cmap, vmin, vmax)
     axB.set_title(titles[1])
-    axB.set_xlabel("x")
-    axB.set_ylabel("y")
-
-    if share_colorbar:
-        cbar = fig.colorbar(imB, ax=[axA, axB], shrink=0.85, pad=0.02)
-        cbar.set_label("value")
-    else:
-        fig.colorbar(imA, ax=axA, shrink=0.85, pad=0.02)
-        fig.colorbar(imB, ax=axB, shrink=0.85, pad=0.02)
+    add_overlays(axB, B, show_minmax=overlay_minmax,
+                 show_rankboxes=overlay_rankboxes)
 
     if show_diff:
         D = B - A
         if diff_vlim is None:
             m = np.nanmax(np.abs(D))
             diff_vlim = 1e-16 if m == 0 else m
-        imD = axD.imshow(D, origin="lower", cmap=diff_cmap,
-                         vmin=-diff_vlim, vmax=diff_vlim)
-        axD.set_aspect("equal")
+        imD, _ = _imshow_with_colorbar(axD, D, diff_cmap,
+                                       -diff_vlim, diff_vlim)
         axD.set_title("B - A")
-        axD.set_xlabel("x")
-        axD.set_ylabel("y")
-        fig.colorbar(imD, ax=axD, shrink=0.85, pad=0.02)
 
     if save:
         fig.savefig(save, dpi=150, bbox_inches="tight")
@@ -128,6 +166,10 @@ def animate_from_outputs(
     writer: Optional[str] = None,
     title_prefix: str = "timestep",
     show: bool = False,
+    overlay_minmax: bool = False,
+    overlay_rankgrid: bool = False,
+    overlay_rankboxes: bool = False,
+    rank_layout=None,
 ):
     if steps is None:
         steps = list_available_steps(base_outputs_dir, fmt=fmt)
@@ -144,20 +186,26 @@ def animate_from_outputs(
         vmin = min(vals) if vmin is None else vmin
         vmax = max(vals) if vmax is None else vmax
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    im = ax.imshow(U0, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
-    ax.set_aspect("equal")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
+    fig, ax = plt.subplots(figsize=(6, 6))
+    im, _ = _imshow_with_colorbar(ax, U0, cmap, vmin, vmax)
     ttl = ax.set_title(f"{title_prefix}: {steps[0]}")
 
-    fig.colorbar(im, ax=ax, shrink=0.85, pad=0.02)
+    add_overlays(ax, U0,
+                 show_minmax=overlay_minmax,
+                 show_rankgrid=overlay_rankgrid,
+                 show_rankboxes=overlay_rankboxes,
+                 rank_layout=rank_layout)
 
     def _update(frame_idx: int):
         step = steps[frame_idx]
         U = load_global(base_outputs_dir, step, fmt=fmt, var=var)
         im.set_data(U)
         ttl.set_text(f"{title_prefix}: {step}")
+        add_overlays(ax, U,
+                     show_minmax=overlay_minmax,
+                     show_rankgrid=overlay_rankgrid,
+                     show_rankboxes=overlay_rankboxes,
+                     rank_layout=rank_layout)
         return (im, ttl)
 
     anim = FuncAnimation(

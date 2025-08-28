@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os, csv
 from typing import Optional, Sequence
 
 from .io import load_global, list_available_steps
@@ -19,12 +20,29 @@ def _parse_steps_arg(steps_arg: Optional[str], avail: Sequence[int]) -> Sequence
     return [int(x) for x in s.split(",") if x.strip()]
 
 
+def load_rank_layout(base_dir: str):
+    layout_path = os.path.join(base_dir, "rank_layout.csv")
+    ranks = []
+    if not os.path.exists(layout_path):
+        return None
+
+    with open(layout_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rank = int(row["rank"])
+            x0, y0 = int(row["x_offset"]), int(row["y_offset"])
+            nx, ny = int(row["nx_local"]), int(row["ny_local"])
+            ranks.append((rank, x0, y0, nx, ny))
+    return ranks or None
+
+
 def cmd_show(args: argparse.Namespace) -> None:
     steps = list_available_steps(args.dir, fmt=args.fmt)
     if not steps:
         raise SystemExit(f"No snapshots found in {args.dir}/snapshots for fmt={args.fmt!r}")
     step = args.step if args.step is not None else steps[-1]
     U = load_global(args.dir, step, fmt=args.fmt, var=args.var)
+    rank_layout = load_rank_layout(args.dir) if args.overlay_rankgrid else None
     imshow_field(
         U,
         title=args.title or f"{args.dir} :: step {step}",
@@ -34,6 +52,10 @@ def cmd_show(args: argparse.Namespace) -> None:
         colorbar=not args.no_colorbar,
         show=args.show,
         save=args.save,
+        overlay_minmax=args.overlay_minmax,
+        overlay_rankgrid=args.overlay_rankgrid,
+        overlay_rankboxes=args.overlay_rankboxes,
+        rank_layout=rank_layout,
     )
 
 
@@ -53,6 +75,8 @@ def cmd_compare(args: argparse.Namespace) -> None:
         diff_vlim=args.diff_vlim,
         show=args.show,
         save=args.save,
+        overlay_minmax=args.overlay_minmax,
+        overlay_rankboxes=args.overlay_rankboxes,
     )
 
 
@@ -69,6 +93,7 @@ def cmd_animate(args: argparse.Namespace) -> None:
             b = args.end if args.end is not None else avail[-1]
             stride = args.stride if args.stride is not None else 1
             sel = [k for k in avail if a <= k <= b][::stride]
+    rank_layout = load_rank_layout(args.dir) if args.overlay_rankgrid else None
     animate_from_outputs(
         args.dir,
         fmt=args.fmt,
@@ -83,7 +108,12 @@ def cmd_animate(args: argparse.Namespace) -> None:
         save=args.save,
         writer=args.writer,
         title_prefix=args.title_prefix,
+        overlay_minmax=args.overlay_minmax,
+        overlay_rankgrid=args.overlay_rankgrid,
+        overlay_rankboxes=args.overlay_rankboxes,
+        rank_layout=rank_layout,
     )
+
 
 def cmd_watch(args):
     import time
@@ -145,6 +175,7 @@ def cmd_watch(args):
     except KeyboardInterrupt:
         pass
 
+
 def cmd_interactive(args):
     import matplotlib.pyplot as plt
     from . import io
@@ -174,6 +205,7 @@ def cmd_interactive(args):
     fig.canvas.mpl_connect("key_press_event", on_key)
     plt.show()
 
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="climate-vis",
@@ -183,21 +215,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     # show
     ps = sub.add_parser("show", help="Render a single snapshot")
-    ps.add_argument("--dir", required=True, help="Base outputs directory (contains snapshots/)")
+    ps.add_argument("--dir", required=True)
     ps.add_argument("--fmt", choices=["csv", "nc"], default="csv")
-    ps.add_argument("--var", default="u", help="NetCDF variable name (ignored for CSV)")
-    ps.add_argument("--step", type=int, help="Snapshot index (default: latest)")
-    ps.add_argument("--title", help="Plot title")
+    ps.add_argument("--var", default="u")
+    ps.add_argument("--step", type=int)
+    ps.add_argument("--title")
     ps.add_argument("--cmap", default="viridis")
     ps.add_argument("--vmin", type=float)
     ps.add_argument("--vmax", type=float)
     ps.add_argument("--no-colorbar", action="store_true")
-    ps.add_argument("--show", action="store_true", help="Display the figure window")
-    ps.add_argument("--save", help="Path to save PNG")
+    ps.add_argument("--show", action="store_true")
+    ps.add_argument("--save")
+    ps.add_argument("--overlay-minmax", action="store_true")
+    ps.add_argument("--overlay-rankgrid", action="store_true")
+    ps.add_argument("--overlay-rankboxes", action="store_true")
     ps.set_defaults(func=cmd_show)
 
     # compare
-    pc = sub.add_parser("compare", help="Side-by-side comparison of two outputs at same step")
+    pc = sub.add_parser("compare", help="Side-by-side comparison")
     pc.add_argument("--dir-a", required=True)
     pc.add_argument("--dir-b", required=True)
     pc.add_argument("--fmt-a", choices=["csv", "nc"], default="csv")
@@ -215,48 +250,54 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--diff-cmap", default="coolwarm")
     pc.add_argument("--diff-vlim", type=float)
     pc.add_argument("--show", action="store_true")
-    pc.add_argument("--save", help="Path to save PNG")
+    pc.add_argument("--save")
+    pc.add_argument("--overlay-minmax", action="store_true")
+    pc.add_argument("--overlay-rankgrid", action="store_true")
+    pc.add_argument("--overlay-rankboxes", action="store_true")
     pc.set_defaults(func=cmd_compare)
 
     # animate
-    pa = sub.add_parser("animate", help="Create an animation over steps")
+    pa = sub.add_parser("animate", help="Create animation")
     pa.add_argument("--dir", required=True)
     pa.add_argument("--fmt", choices=["csv", "nc"], default="csv")
     pa.add_argument("--var", default="u")
     group_sel = pa.add_mutually_exclusive_group()
-    group_sel.add_argument("--steps", help="Explicit selection: 'a-b' or 'i,j,k'")
+    group_sel.add_argument("--steps")
     group_sel2 = pa.add_argument_group("range selection")
     group_sel2.add_argument("--start", type=int)
     group_sel2.add_argument("--end", type=int)
     group_sel2.add_argument("--stride", type=int)
-    pa.add_argument("--interval", type=int, default=150, help="ms between frames")
+    pa.add_argument("--interval", type=int, default=150)
     pa.add_argument("--fps", type=int, default=12)
     pa.add_argument("--no-repeat", action="store_true")
     pa.add_argument("--cmap", default="viridis")
     pa.add_argument("--vmin", type=float)
     pa.add_argument("--vmax", type=float)
-    pa.add_argument("--save", required=True, help="Output file (.mp4 or .gif)")
+    pa.add_argument("--save", required=True)
     pa.add_argument("--writer", choices=["ffmpeg", "pillow"])
     pa.add_argument("--title-prefix", default="timestep")
+    pa.add_argument("--overlay-minmax", action="store_true")
+    pa.add_argument("--overlay-rankgrid", action="store_true")
+    pa.add_argument("--overlay-rankboxes", action="store_true")
     pa.set_defaults(func=cmd_animate)
 
     # watch
-    p_w =sub.add_parser("watch", help="Live view: poll outputs/snapshots and redraw on new steps")
-    p_w.add_argument("--dir", default="outputs", help="Base outputs dir (contains rank_layout.csv and snapshots/)")
-    p_w.add_argument("--fmt", choices=["csv", "nc"], default="csv", help="Snapshot format to read")
-    p_w.add_argument("--var", default="u", help="NetCDF variable name (when --fmt=nc)")
-    p_w.add_argument("--interval", type=float, default=0.5, help="Polling interval in seconds")
-    p_w.add_argument("--cmap", default="viridis", help="Matplotlib colormap")
-    p_w.add_argument("--vmin", type=float, default=None, help="Fixed lower color limit (default: autoscale)")
-    p_w.add_argument("--vmax", type=float, default=None, help="Fixed upper color limit (default: autoscale)")
-    p_w.add_argument("--title", default=None, help="Figure title (default: Step <n>)")
-    p_w.add_argument("--no-colorbar", action="store_true", help="Disable colorbar")
-    p_w.add_argument("--tight", action="store_true", help="Apply tight_layout on each draw")
-    p_w.add_argument("--redraw-same", action="store_true", help="Redraw even if the latest step didn’t change")
+    p_w = sub.add_parser("watch", help="Live view of outputs")
+    p_w.add_argument("--dir", default="outputs")
+    p_w.add_argument("--fmt", choices=["csv", "nc"], default="csv")
+    p_w.add_argument("--var", default="u")
+    p_w.add_argument("--interval", type=float, default=0.5)
+    p_w.add_argument("--cmap", default="viridis")
+    p_w.add_argument("--vmin", type=float, default=None)
+    p_w.add_argument("--vmax", type=float, default=None)
+    p_w.add_argument("--title", default=None)
+    p_w.add_argument("--no-colorbar", action="store_true")
+    p_w.add_argument("--tight", action="store_true")
+    p_w.add_argument("--redraw-same", action="store_true")
     p_w.set_defaults(func=cmd_watch)
 
-    #interactive
-    pi = sub.add_parser("interactive", help="Interactive navigation of outputs")
+    # interactive
+    pi = sub.add_parser("interactive", help="Interactive navigation")
     pi.add_argument("--dir", required=True)
     pi.add_argument("--fmt", choices=["csv", "nc"], default="csv")
     pi.add_argument("--var", default="u")

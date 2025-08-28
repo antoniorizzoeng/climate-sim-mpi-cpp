@@ -134,12 +134,12 @@ add_it(integration_ic_netcdf         simulation/integration/integration_ic_netcd
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 add_test(
-  NAME py_visualization
+  NAME Unit_Python
   COMMAND ${Python3_EXECUTABLE} -m pytest tests/visualization
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-set_tests_properties(py_visualization PROPERTIES
+set_tests_properties(Unit_Python PROPERTIES
   ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR};MPLBACKEND=Agg"
   LABELS "python;visualization"
 )
