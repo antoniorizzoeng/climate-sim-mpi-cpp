@@ -29,6 +29,6 @@ jobs:
             libyaml-cpp-dev
       - name: Build (compile for CodeQL)
         run: |
-          cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DBUILD_BENCH=OFF
+          cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF
           cmake --build build --parallel
       - uses: github/codeql-action/analyze@v3

@@ -44,7 +44,7 @@ jobs:
       - name: Configure (CMake)
         run: |
           cmake -S . -B build -G Ninja \
-            -DBUILD_TESTING=ON -DBUILD_BENCH=OFF
+            -DBUILD_TESTING=ON
 
       - name: Build
         run: cmake --build build --parallel
