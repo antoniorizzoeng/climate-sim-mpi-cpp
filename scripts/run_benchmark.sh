@@ -14,12 +14,12 @@ WEAK_TILE_NX="${WEAK_TILE_NX:-256}"
 WEAK_TILE_NY="${WEAK_TILE_NY:-256}"
 WEAK_RANKS="${WEAK_RANKS:-1 4 16}"
 
-if [ ! -x "${BUILD_DIR}/bench/bench_exchange" ]; then
-  cmake -S . -B "${BUILD_DIR}" -DBUILD_TESTING=OFF -DBUILD_BENCH=ON
-  cmake --build "${BUILD_DIR}" --parallel
+exe="${BUILD_DIR}/src/climate_sim"
+if [ ! -x "${exe}" ]; then
+  echo "ERROR: ${exe} not found or not executable. Build first with CMake." >&2
+  exit 1
 fi
 
-exe="${BUILD_DIR}/bench/bench_exchange"
 ts=$(date +"%Y%m%d_%H%M%S")
 out_dir="bench/results"
 mkdir -p "${out_dir}"
@@ -28,73 +28,70 @@ strong_csv="${out_dir}/strong_${ts}.csv"
 weak_csv="${out_dir}/weak_${ts}.csv"
 strong_annot="${out_dir}/strong_annotated_${ts}.csv"
 
+run_and_parse() {
+  local np=$1 nx=$2 ny=$3 steps=$4
+  local line time perstep
+  line=$(${TIME_CMD} mpirun ${OVERSUB} -np "${np}" "${exe}" \
+    --nx="${nx}" --ny="${ny}" --steps="${steps}" | grep "timing:")
+
+  time=$(echo "$line" | sed -E 's/.*total_max=([0-9.e+-]+).*/\1/')
+  perstep=$(awk -v t="$time" -v s="$steps" 'BEGIN {printf "%.8f", t/s}')
+  echo "$time,$perstep"
+}
+
 # -------------------------
 # Strong scaling
 # -------------------------
 echo "# strong scaling: Nx=${STRONG_NX}, Ny=${STRONG_NY}, steps=${STEPS}" > "${strong_csv}"
-echo "ranks,Px,Py,nx,ny,nx_local,ny_local,steps,halo,total_max,total_min,perstep_worst,rss_kb_max" >> "${strong_csv}"
+echo "ranks,nx,ny,steps,total_time,perstep_time" >> "${strong_csv}"
 
 for p in ${STRONG_RANKS}; do
   echo "== strong: p=${p} =="
-  ${TIME_CMD} mpirun ${OVERSUB} -np "${p}" "${exe}" \
-    --nx="${STRONG_NX}" --ny="${STRONG_NY}" --steps="${STEPS}" \
-    | tail -n1 >> "${strong_csv}"
+  vals=$(run_and_parse "$p" "$STRONG_NX" "$STRONG_NY" "$STEPS")
+  echo "${p},${STRONG_NX},${STRONG_NY},${STEPS},${vals}" >> "${strong_csv}"
 done
 
-T1=$(awk -F, '
-  NR==2 { for(i=1;i<=NF;i++) h[$i]=i; next }
-  $0 ~ /^#/ { next }
-  $1 ~ /^[[:space:]]*$/ { next }
-  ( $h["ranks"]+0 )==1 { print $(h["total_max"]); exit }
-' "${strong_csv}" || true)
-
+T1=$(awk -F, 'NR==3 {print $5}' "${strong_csv}")
 if [ -n "${T1:-}" ]; then
   awk -F, -v T1="${T1}" '
-    function map_header() { for(i=1;i<=NF;i++) h[$i]=i }
-    NR==1 { print; next }
-    NR==2 { map_header(); print $0",speedup,efficiency,karp_flatt"; next }
-    $0 ~ /^#/ { print; next }
+    BEGIN {OFS=","}
+    NR==1 {print; next}
+    NR==2 {print $0,",speedup,efficiency,karp_flatt"; next}
+    /^#/ {print; next}
     {
-      P = $(h["ranks"])+0
-      Tp = $(h["total_max"])+0
-      S = (Tp>0) ? (T1/Tp) : 0
-      E = (P>0) ? (S/P) : 0
-      if (P>1 && S>0) {
-        KF = ( (1.0/S - 1.0/P) / (1.0 - 1.0/P) )
-      } else {
-        KF = 0.0
-      }
-      printf "%s,%.6f,%.6f,%.6f\n", $0, S, E, KF
+      P=$1; Tp=$5+0
+      S=(Tp>0)? T1/Tp : 0
+      E=(P>0)? S/P : 0
+      KF=(P>1 && S>0)? ((1/S - 1/P)/(1 - 1/P)) : 0
+      print $0,S,E,KF
     }
   ' "${strong_csv}" > "${strong_annot}"
+  echo "Annotated strong-scaling results written to ${strong_annot}"
 else
-  echo "WARNING: Could not determine T1 (no ranks=1 row?) — skipping Karp–Flatt annotation." >&2
-  strong_annot=""
+  echo "WARNING: could not determine T1 baseline; skipping annotation."
 fi
 
 # -------------------------
 # Weak scaling
 # -------------------------
 echo "# weak scaling: tile=${WEAK_TILE_NX}x${WEAK_TILE_NY}, steps=${STEPS}" > "${weak_csv}"
-echo "ranks,Px,Py,nx,ny,nx_local,ny_local,steps,halo,total_max,total_min,perstep_worst,rss_kb_max" >> "${weak_csv}"
+echo "ranks,nx,ny,steps,total_time,perstep_time" >> "${weak_csv}"
 
 for p in ${WEAK_RANKS}; do
   k=$(echo "sqrt(${p})" | bc)
   if [ $((k * k)) -lt "${p}" ]; then
     k=$((k + 1))
   fi
-
   NX=$(( WEAK_TILE_NX * k ))
   NY=$(( WEAK_TILE_NY * k ))
 
   echo "== weak: p=${p}, Nx=${NX}, Ny=${NY} =="
-  ${TIME_CMD} mpirun ${OVERSUB} -np "${p}" "${exe}" \
-    --nx="${NX}" --ny="${NY}" --steps="${STEPS}" \
-    | tail -n1 >> "${weak_csv}"
+  vals=$(run_and_parse "$p" "$NX" "$NY" "$STEPS")
+  echo "${p},${NX},${NY},${STEPS},${vals}" >> "${weak_csv}"
 done
 
 echo
 echo "Wrote:"
 echo "  ${strong_csv}"
-[ -n "${strong_annot}" ] && echo "  ${strong_annot}"
+[ -f "${strong_annot}" ] && echo "  ${strong_annot}"
 echo "  ${weak_csv}"
