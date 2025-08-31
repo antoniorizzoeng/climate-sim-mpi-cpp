@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(MPI REQUIRED)
+find_dependency(yaml-cpp REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/climate-sim-mpi-cppTargets.cmake")

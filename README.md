@@ -151,6 +151,74 @@ pytest tests/visualization -v
 
 ---
 
+## Installation
+
+After building with CMake, you can install `climate_sim` system-wide:
+
+```bash
+cmake --install build --prefix /usr/local
+```
+
+This installs:
+
+- `climate_sim` into `/usr/local/bin`
+- CMake package config files into `/usr/local/lib/cmake/climate-sim-mpi-cpp`
+- Headers and libraries for bundled dependencies (e.g. GoogleTest, if enabled)
+
+> **Note:** `sudo` may be required if you do not have write permission for the prefix.
+
+### Local Installation (Non-Root)
+
+To install into a custom location (e.g. `$HOME/.local`):
+
+```bash
+cmake --install build --prefix $HOME/.local
+```
+
+Make sure the binary directory is on your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Now you can run the simulator from anywhere:
+
+```bash
+climate_sim --config configs/dev.yaml
+```
+
+---
+
+## Uninstallation
+
+CMake does not generate an uninstall target by default. You can remove the installed files manually.
+
+If you installed to `/usr/local`:
+
+```bash
+sudo rm -f /usr/local/bin/climate_sim
+sudo rm -rf /usr/local/lib/cmake/climate-sim-mpi-cpp
+```
+
+If you installed locally to `$HOME/.local`:
+
+```bash
+rm -f $HOME/.local/bin/climate_sim
+rm -rf $HOME/.local/lib/cmake/climate-sim-mpi-cpp
+```
+
+Alternatively, consider using package managers (e.g. building a `.deb` or `.rpm`) for more automated installation/uninstallation.
+
+---
+
+## Verification
+
+After installation, verify the binary is available:
+
+```bash
+which climate_sim
+```
+
 ## License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**.
