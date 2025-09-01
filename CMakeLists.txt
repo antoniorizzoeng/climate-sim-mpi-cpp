@@ -9,6 +9,14 @@ find_package(yaml-cpp REQUIRED)
 
 include(CTest)
 
+option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
+
+if(ENABLE_COVERAGE)
+    message(STATUS "Building with coverage flags")
+    add_compile_options(--coverage -O0 -g)
+    add_link_options(--coverage)
+endif()
+
 add_subdirectory(src)
 
 set(INSTALL_GTEST OFF CACHE BOOL "Disable installation of googletest" FORCE)

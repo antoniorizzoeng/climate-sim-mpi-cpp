@@ -50,3 +50,9 @@ Gemfile
 _site/
 .bundle/
 Gemfile.lock
+
+# Coverage reports
+coverage/
+*.gcda
+*.gcno
+*.gcov
