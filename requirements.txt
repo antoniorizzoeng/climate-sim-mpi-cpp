@@ -4,3 +4,5 @@ matplotlib
 netCDF4
 imageio
 pytest
+pytest-cov
+coverage

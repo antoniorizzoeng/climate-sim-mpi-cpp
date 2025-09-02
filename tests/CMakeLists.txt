@@ -127,19 +127,3 @@ add_it(integration_decomp_coverage   simulation/integration/integration_decomp_c
 add_it(integration_csv_vs_nc         simulation/integration/integration_csv_vs_nc.cpp)
 add_it(integration_boundary_error    simulation/integration/integration_boundary_error.cpp)
 add_it(integration_ic_netcdf         simulation/integration/integration_ic_netcdf.cpp)
-
-# ------------------------------
-# Visualization pytests
-# ------------------------------
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
-add_test(
-  NAME Unit_Python
-  COMMAND ${Python3_EXECUTABLE} -m pytest tests/visualization
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-set_tests_properties(Unit_Python PROPERTIES
-  ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR};MPLBACKEND=Agg"
-  LABELS "python;visualization"
-)
