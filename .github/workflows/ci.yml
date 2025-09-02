@@ -41,18 +41,21 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Run tests
+      - name: Run climate-sim tests
         env:
           OMPI_MCA_btl: "self,tcp"
         run: ctest --test-dir build --output-on-failure
 
-      - name: Generate coverage report
+      - name: Generate climate-sim coverage report
         run: |
           mkdir -p coverage
           cd build
           gcovr -r .. --xml-pretty --output ../coverage/coverage.xml
           gcovr -r .. --html --html-details -o ../coverage/coverage.html
           gcovr -r .. --fail-under-line 50
+
+      - name: Run visualization tests with coverage
+        run: pytest --cov --cov-fail-under=80
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
