@@ -5,9 +5,6 @@ nav_order: 2
 
 # Architecture
 
-## Overview
-Deterministic 2D climate toy model (temperature) using finite differences for diffusion and advection, parallelized with MPI via 2D domain decomposition and halo exchanges.
-
 ## Modules
 - `src/main.cpp` — entrypoint; parse config, initialize MPI, wire components, run loop.
 - `include/config.hpp` — CLI/config parsing (nx, ny, dt, steps, coeffs, output freq).
@@ -49,24 +46,5 @@ Example flags:
 - Prebuild MPI datatypes for halos (if not handled internally).
 
 ## Output
-- Per-rank CSV tiles: `snap_<step>_r<rank>.csv` (simple and parallel).
+- Per-rank CSV/NetCDF tiles: `snap_<step>_r<rank>.csv` (simple and parallel).
 - Global stats: min/max/mean via reductions every `out_every` steps.
-- Later: move to parallel NetCDF if needed.
-
-## Main Loop Pseudocode
-```
-for n in 0..steps-1:
-  exchange_halos(u)
-  apply_boundary(u)
-  compute_diffusion(u, tmp)
-  compute_advection(u, tmp)
-  swap(u, tmp)
-  if (n % out_every == 0): write_snapshot(u,n); report_stats(u,n)
-```
-
-## Testing Targets
-- Indexing/layout: `Field` bounds and halo handling.
-- Decomposition: local sizes/offsets sum to global; neighbor ranks correct.
-- Halo MPI datatypes: shapes/strides correct (toy sizes).
-- Kernel sanity: diffusion single step vs expected stencil.
-- Determinism: repeatable outputs with fixed inputs, ranks, and build.

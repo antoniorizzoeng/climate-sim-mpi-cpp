@@ -17,8 +17,7 @@ This document derives **compute**, **communication**, **memory**, and **I/O** co
 - Data type: 8-byte double.
 - One field updated per step (`u`), with a ping-pong buffer (`tmp`).
 
-## Main Loop (reference)
-
+## Main Loop Pseudocode
 ```
 for n in 0..steps-1:
   exchange_halos(u)
