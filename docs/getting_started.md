@@ -79,4 +79,14 @@ python -m visualization.cli interactive --dir outputs --fmt nc --var u
 
 ---
 
+## Install
+
+You can install climate-sim using these commands
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+sudo cmake --install build --prefix /usr/local # Or specify a different folder
+which climate_sim # Verify installation
+```
+
 [← Back to Home](index.md)
