@@ -52,22 +52,7 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - MPI implementation (OpenMPI, MPICH, etc.)
 - Optional: NetCDF-C library
 
-### Python (visualization)
-Install dependencies with:
-
-```bash
-pip install -r requirements.txt
-```
-
-Key packages:
-- numpy
-- matplotlib
-- netCDF4 (optional, for NetCDF outputs)
-- pytest (for testing)
-
----
-
-## Build & Run (Simulation)
+## Build & Run
 
 ```bash
 mkdir build && cd build
@@ -81,23 +66,11 @@ Run simulation (example, 4 MPI ranks):
 mpirun --oversubscribe -np 4 ./src/climate_sim --config=configs/dev.yaml --output.format=netcdf
 ```
 
-Example `configs/dev.yaml`:
+### Python (visualization)
+Install dependencies with:
 
-```yaml
-grid:    { nx: 256, ny: 256, dx: 1.0, dy: 1.0 }
-physics: { D: 0.05, vx: 0.5, vy: 0.0 }
-time:    { dt: 0.1, steps: 1000, out_every: 100 }
-bc:      periodic
-output:  { prefix: "dev" }
-
-ic:
-  preset: gaussian_hotspot
-  file:   "inputs/ic_global_double.bin"
-  params:
-    A: 1.0
-    sigma_frac: 0.05
-    xc_frac: 0.5
-    yc_frac: 0.5
+```bash
+pip install -r requirements.txt
 ```
 
 ---
@@ -119,17 +92,6 @@ python -m visualization.cli watch --dir outputs --fmt csv --interval 1.0
 # Interactive simulation viz
 python -m visualization.cli interactive --dir outputs --fmt csv
 ```
-
-### Python API
-
-```python
-from visualization.io import load_global
-from visualization.plots import animate_from_outputs
-
-U = load_global("outputs", step=0, fmt="csv")
-anim, fig, ax = animate_from_outputs("outputs", fmt="csv", save="movie.gif")
-```
-
 ---
 
 ## Tests
@@ -227,3 +189,4 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 - Discourages proprietary/commercial adoption.
 
 See [LICENSE](LICENSE) for full text.
+Visit https://antoniorizzoeng.github.io/climate-sim-mpi-cpp/ for more info.
