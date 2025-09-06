@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import os, csv
 from typing import Optional, Sequence
-
+import time
+import matplotlib.pyplot as plt
+from . import io
 from .io import load_global, list_available_steps
 from .plots import imshow_field, compare_fields, animate_from_outputs
 
@@ -116,10 +118,6 @@ def cmd_animate(args: argparse.Namespace) -> None:
 
 
 def cmd_watch(args):
-    import time
-    import matplotlib.pyplot as plt
-    from . import io
-
     base = args.dir
     fmt = args.fmt
     var = args.var
@@ -128,7 +126,6 @@ def cmd_watch(args):
     plt.ion()
     fig, ax = plt.subplots()
     im = None
-    cbar = None
     last_step = None
 
     vmin = args.vmin
@@ -157,11 +154,9 @@ def cmd_watch(args):
                 im = ax.imshow(U, origin="lower", vmin=vmin, vmax=vmax, cmap=args.cmap)
                 ax.set_title(args.title or f"Step {step}")
                 if not args.no_colorbar:
-                    cbar = fig.colorbar(im, ax=ax)
+                    fig.colorbar(im, ax=ax)
             else:
                 im.set_data(U)
-                if vmin is None or vmax is None:
-                    im.set_clim(vmin=vmin, vmax=vmax)
                 ax.set_title(args.title or f"Step {step}")
 
             if args.tight:
@@ -177,9 +172,6 @@ def cmd_watch(args):
 
 
 def cmd_interactive(args):
-    import matplotlib.pyplot as plt
-    from . import io
-
     steps = io.list_available_steps(args.dir, fmt=args.fmt)
     if not steps:
         raise SystemExit("No snapshots found")
