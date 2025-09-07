@@ -55,7 +55,7 @@ jobs:
           gcovr -r .. --fail-under-line 30
 
       - name: Run visualization tests with coverage
-        run: pytest --cov --cov-fail-under=75
+        run: pytest --cov --cov-fail-under=95
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
