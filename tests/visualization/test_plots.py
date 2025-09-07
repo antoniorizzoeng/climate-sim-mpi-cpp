@@ -94,5 +94,108 @@ def test_animate_from_outputs_runtime_error(tmp_path):
     with pytest.raises(RuntimeError):
         animate_from_outputs(str(tmp_path), fmt="csv", steps=[])
 
+def test_animate_from_outputs_autoscale_and_show(monkeypatch, tmp_outputs_dir):
+    steps = [0, 1]
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    _seed_csv_case(tmp_outputs_dir, step=1)
+
+    called = {}
+    monkeypatch.setattr(plt, "show", lambda: called.setdefault("shown", True))
+
+    out = os.path.join(tmp_outputs_dir, "anim.gif")
+    anim, fig, ax = animate_from_outputs(
+        tmp_outputs_dir,
+        fmt="csv",
+        steps=steps,
+        save=out,
+        writer=None,
+        show=True,
+    )
+    assert os.path.isfile(out)
+    assert "shown" in called
+    plt.close(fig)
+
+def test_animate_from_outputs_invalid_writer(tmp_outputs_dir):
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    out = os.path.join(tmp_outputs_dir, "bad.gif")
+    with pytest.raises(ValueError):
+        animate_from_outputs(tmp_outputs_dir,
+                             fmt="csv",
+                             steps=[0],
+                             save=out,
+                             writer="invalid")
+
+def test_add_overlays_no_rank_layout():
+    fig, ax = plt.subplots()
+    U = np.zeros((2, 2))
+    add_overlays(ax, U, show_rankgrid=True, rank_layout=None)
+    plt.close(fig)
+
+def test_imshow_field_show_branch(monkeypatch, tmp_outputs_dir):
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    U = assemble_global_csv(tmp_outputs_dir, 0)
+    monkeypatch.setattr(plt, "show", lambda: None)
+    fig, ax = imshow_field(U, show=True)
+    plt.close(fig)
 
 
+def test_compare_fields_autoscale_and_save_show(monkeypatch, tmp_path):
+    A = np.zeros((3, 3))
+    B = np.ones((3, 3))
+    B[:] = A[:]
+    monkeypatch.setattr(plt, "show", lambda: None)
+    out = tmp_path / "cmp.png"
+    fig, axes = compare_fields(A, B, save=out, show=True)
+    assert out.exists()
+    plt.close(fig)
+
+def test_animate_from_outputs_steps_none_and_autoscale(tmp_outputs_dir):
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    _seed_csv_case(tmp_outputs_dir, step=1)
+    out = os.path.join(tmp_outputs_dir, "anim.gif")
+    anim, fig, ax = animate_from_outputs(tmp_outputs_dir, fmt="csv", save=out, writer="pillow")
+    assert os.path.isfile(out)
+    plt.close(fig)
+
+
+def test_animate_from_outputs_ffmpeg_branch(monkeypatch, tmp_outputs_dir):
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    out = os.path.join(tmp_outputs_dir, "anim.mp4")
+
+    def fake_save(*a, **k): raise Exception("ffmpeg fail")
+    monkeypatch.setattr("matplotlib.animation.FuncAnimation.save", fake_save)
+
+    with pytest.raises(RuntimeError):
+        animate_from_outputs(tmp_outputs_dir, fmt="csv", steps=[0], save=out, writer="ffmpeg")
+
+def test_add_overlays_with_rankgrid_no_layout():
+    fig, ax = plt.subplots()
+    U = np.zeros((2, 2))
+    add_overlays(ax, U, show_rankgrid=True, rank_layout=None)
+    plt.close(fig)
+
+
+def test_imshow_field_no_title_and_save(tmp_outputs_dir):
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    U = assemble_global_csv(tmp_outputs_dir, 0)
+    out = os.path.join(tmp_outputs_dir, "frame2.png")
+    fig, ax = imshow_field(U, save=out)
+    assert os.path.exists(out)
+    plt.close(fig)
+
+
+def test_compare_fields_autoscale_and_diff_vlim_zero(monkeypatch):
+    A = np.zeros((4, 4))
+    B = np.zeros((4, 4))
+    monkeypatch.setattr(plt, "show", lambda: None)
+    fig, axes = compare_fields(A, B, show_diff=True)
+    plt.close(fig)
+
+
+def test_animate_from_outputs_autoscale_path(tmp_outputs_dir):
+    _seed_csv_case(tmp_outputs_dir, step=0)
+    _seed_csv_case(tmp_outputs_dir, step=1)
+    out = os.path.join(tmp_outputs_dir, "anim2.gif")
+    anim, fig, ax = animate_from_outputs(tmp_outputs_dir, fmt="csv", save=out, writer="pillow")
+    assert os.path.exists(out)
+    plt.close(fig)
