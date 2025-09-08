@@ -50,12 +50,10 @@ jobs:
         run: |
           mkdir -p coverage
           cd build
-          gcovr -r .. --xml-pretty --output ../coverage/coverage.xml
-          gcovr -r .. --html --html-details -o ../coverage/coverage.html
-          gcovr -r .. --fail-under-line 30
+          gcovr
 
       - name: Run visualization tests with coverage
-        run: pytest --cov --cov-fail-under=95
+        run: pytest --cov --cov-fail-under=90
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

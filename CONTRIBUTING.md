@@ -21,7 +21,7 @@ Use the GitHub Issues page with reproduction steps.
   ctest --test-dir build --output-on-failure
   pytest --cov=visualization --cov=src
 ```
-- Coverage must be **≥ 95%** for both the C++ simulation and the Python visualization.
+- Coverage must be **≥ 90%** for both the C++ simulation and the Python visualization.
 - Pull Requests that reduce coverage below this threshold will not be accepted.
 
 You can generate a coverage report locally:

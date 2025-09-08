@@ -88,6 +88,10 @@ target_link_libraries(test_halo PRIVATE core GTest::gtest GTest::gtest_main MPI:
 apply_mpi_wrapper(test_halo)
 gtest_discover_tests(test_halo DISCOVERY_TIMEOUT 60)
 
+add_executable(test_advection simulation/unit/test_advection.cpp)
+target_link_libraries(test_advection PRIVATE core GTest::gtest GTest::gtest_main MPI::MPI_CXX)
+gtest_discover_tests(test_advection DISCOVERY_TIMEOUT 30)
+
 # ------------------------------
 # Integration tests
 # ------------------------------
