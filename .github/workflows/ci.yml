@@ -49,8 +49,7 @@ jobs:
       - name: Generate climate-sim coverage report
         run: |
           mkdir -p coverage
-          cd build
-          gcovr
+          gcovr --txt
 
       - name: Run visualization tests with coverage
         run: pytest --cov --cov-fail-under=90
