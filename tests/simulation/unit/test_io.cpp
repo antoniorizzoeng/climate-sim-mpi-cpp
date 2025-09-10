@@ -9,12 +9,28 @@
 #include "init.hpp"
 #include "io.hpp"
 
+#ifdef HAS_NETCDF
+#include <netcdf.h>
+#endif
+
 static std::string cfg_path(const char* fname) {
 #ifdef CONFIGS_DIR
     return std::string(CONFIGS_DIR) + "/" + fname;
 #else
     return fname;
 #endif
+}
+
+static Decomp2D make_decomp(
+    int nx_global, int ny_global, int nx_local, int ny_local, int x_off = 0, int y_off = 0) {
+    Decomp2D d{};
+    d.nx_global = nx_global;
+    d.ny_global = ny_global;
+    d.nx_local = nx_local;
+    d.ny_local = ny_local;
+    d.x_offset = x_off;
+    d.y_offset = y_off;
+    return d;
 }
 
 TEST(Unit_IO_Yaml, LoadsNestedBlocksAndBC) {
@@ -27,7 +43,6 @@ TEST(Unit_IO_Yaml, LoadsNestedBlocksAndBC) {
 }
 
 TEST(Unit_IO_CLI, SimpleScalarOverrides) {
-    // base config comes from YAML
     auto tmpfile = "tmp_test.yaml";
     {
         std::ofstream ofs(tmpfile);
@@ -101,3 +116,97 @@ TEST(Unit_IO_CLI, InvalidICPresetThrows) {
     Decomp2D dec;
     EXPECT_THROW({ apply_initial_condition(dec, f, cfg); }, std::runtime_error);
 }
+
+TEST(Unit_IO_BC, BcToStringDefaultCase) {
+    auto bogus = static_cast<BCType>(999);
+    EXPECT_EQ(bc_to_string(bogus), "dirichlet");
+}
+
+TEST(Unit_IO_Yaml, MissingBlocksStillWork) {
+    const std::string fname = "minimal.yaml";
+    {
+        std::ofstream ofs(fname);
+        ofs << "nx: 4\nny: 5\ndx: 1.0\ndy: 1.0\n"
+            << "dt: 0.1\nsteps: 2\nout_every: 1\n";
+    }
+
+    SimConfig cfg = load_yaml_file(fname);
+    EXPECT_EQ(cfg.nx, 4);
+    EXPECT_EQ(cfg.ny, 5);
+    std::remove(fname.c_str());
+}
+
+TEST(Unit_IO_CLI, OverridesWithSpaceSeparator) {
+    std::vector<std::string> args = {"--nx", "42", "--dy", "2.5", "--output.prefix", "cli_space"};
+    SimConfig merged = merged_config(std::nullopt, args);
+    EXPECT_EQ(merged.nx, 42);
+    EXPECT_DOUBLE_EQ(merged.dy, 2.5);
+    EXPECT_EQ(merged.output_prefix, "cli_space");
+}
+
+TEST(Unit_IO_CLI, MergedConfigNoYaml) {
+    std::vector<std::string> args = {"--nx=8", "--ny=8", "--dt=0.1", "--steps=1"};
+    SimConfig cfg = merged_config(std::nullopt, args);
+    EXPECT_EQ(cfg.nx, 8);
+    EXPECT_EQ(cfg.ny, 8);
+}
+
+TEST(Unit_IO_File, WriteAndReadCSV) {
+    Field f(2, 2, 0, 1.0, 1.0);
+    f.at(0, 0) = 1.1;
+    f.at(1, 0) = 2.2;
+    f.at(0, 1) = 3.3;
+    f.at(1, 1) = 4.4;
+
+    const std::string fname = "field.csv";
+    write_field_csv(f, fname);
+
+    std::ifstream ifs(fname);
+    std::string line;
+    std::getline(ifs, line);
+    EXPECT_NE(line.find("1.1"), std::string::npos);
+    std::remove(fname.c_str());
+}
+
+TEST(Unit_IO_File, SnapshotFilenames) {
+    auto csv = snapshot_filename("outdir", 7, 3);
+    EXPECT_NE(csv.find("snapshot_00007_rank00003.csv"), std::string::npos);
+    auto nc = snapshot_filename_nc("outdir", 7, 3);
+    EXPECT_NE(nc.find("snapshot_00007_rank00003.nc"), std::string::npos);
+}
+
+TEST(Unit_IO_File, RankLayoutAppendAndHeader) {
+    const std::string fname = "layout.csv";
+    write_rank_layout_csv(fname, 0, 8, 8, 0, 0, 8, 8, 1);
+    write_rank_layout_csv(fname, 1, 8, 8, 0, 0, 8, 8, 1);
+
+    std::ifstream ifs(fname);
+    std::string all((std::istreambuf_iterator<char>(ifs)), {});
+    EXPECT_NE(all.find("rank,x_offset"), std::string::npos);
+    EXPECT_NE(all.find("1,"), std::string::npos);
+    std::remove(fname.c_str());
+}
+
+#ifdef HAS_NETCDF
+TEST(Unit_IO_File, WriteNetCDFAndReadBack) {
+    auto dec = make_decomp(2, 2, 2, 2);
+    Field f(2, 2, 0, 1.0, 1.0);
+    f.at(0, 0) = 1.0;
+    f.at(1, 0) = 2.0;
+    f.at(0, 1) = 3.0;
+    f.at(1, 1) = 4.0;
+
+    const std::string fname = "field.nc";
+    ASSERT_TRUE(write_field_netcdf(f, fname, dec));
+
+    int ncid, varid;
+    ASSERT_EQ(nc_open(fname.c_str(), NC_NOWRITE, &ncid), NC_NOERR);
+    ASSERT_EQ(nc_inq_varid(ncid, "u", &varid), NC_NOERR);
+    std::vector<double> buf(4);
+    ASSERT_EQ(nc_get_var_double(ncid, varid, buf.data()), NC_NOERR);
+    EXPECT_NEAR(buf[3], 4.0, 1e-12);
+    nc_close(ncid);
+
+    std::remove(fname.c_str());
+}
+#endif
