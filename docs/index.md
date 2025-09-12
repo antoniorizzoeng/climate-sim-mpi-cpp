@@ -15,3 +15,5 @@ A parallel climate simulation framework in C++ using MPI for domain decompositio
 - [Demo & Gallery](demo.md)
 - [License](license.md)
 - [Repository on GitHub](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp)
+- [Something worth reading](learn.md)
+
