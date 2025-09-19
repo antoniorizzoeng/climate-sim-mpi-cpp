@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import os, csv
 from typing import Optional, Sequence
@@ -39,11 +37,11 @@ def load_rank_layout(base_dir: str):
 
 
 def cmd_show(args: argparse.Namespace) -> None:
-    steps = list_available_steps(args.dir, fmt=args.fmt)
+    steps = list_available_steps(args.dir)
     if not steps:
-        raise SystemExit(f"No snapshots found in {args.dir}/snapshots for fmt={args.fmt!r}")
+        raise SystemExit(f"No snapshots found in {args.dir}/snapshots")
     step = args.step if args.step is not None else steps[-1]
-    U = load_global(args.dir, step, fmt=args.fmt, var=args.var)
+    U = load_global(args.dir, step, var=args.var)
     rank_layout = load_rank_layout(args.dir) if args.overlay_rankgrid else None
     imshow_field(
         U,
@@ -62,8 +60,8 @@ def cmd_show(args: argparse.Namespace) -> None:
 
 
 def cmd_compare(args: argparse.Namespace) -> None:
-    Ua = load_global(args.dir_a, args.step, fmt=args.fmt_a, var=args.var_a)
-    Ub = load_global(args.dir_b, args.step, fmt=args.fmt_b, var=args.var_b)
+    Ua = load_global(args.dir_a, args.step, var=args.var_a)
+    Ub = load_global(args.dir_b, args.step, var=args.var_b)
     compare_fields(
         Ua,
         Ub,
@@ -83,9 +81,9 @@ def cmd_compare(args: argparse.Namespace) -> None:
 
 
 def cmd_animate(args: argparse.Namespace) -> None:
-    avail = list_available_steps(args.dir, fmt=args.fmt)
+    avail = list_available_steps(args.dir)
     if not avail:
-        raise SystemExit(f"No snapshots found in {args.dir}/snapshots for fmt={args.fmt!r}")
+        raise SystemExit(f"No snapshots found in {args.dir}/snapshots")
     if args.steps:
         sel = _parse_steps_arg(args.steps, avail)
     else:
@@ -98,7 +96,6 @@ def cmd_animate(args: argparse.Namespace) -> None:
     rank_layout = load_rank_layout(args.dir) if args.overlay_rankgrid else None
     animate_from_outputs(
         args.dir,
-        fmt=args.fmt,
         var=args.var,
         steps=sel,
         interval_ms=args.interval,
@@ -119,7 +116,6 @@ def cmd_animate(args: argparse.Namespace) -> None:
 
 def cmd_watch(args):
     base = args.dir
-    fmt = args.fmt
     var = args.var
     interval = args.interval
 
@@ -134,7 +130,7 @@ def cmd_watch(args):
     try:
         while True:
             try:
-                steps = io.list_available_steps(base, fmt=fmt)
+                steps = io.list_available_steps(base)
             except FileNotFoundError:
                 time.sleep(interval)
                 continue
@@ -148,7 +144,7 @@ def cmd_watch(args):
                 time.sleep(interval)
                 continue
 
-            U = io.load_global(base, step, fmt=fmt, var=var)
+            U = io.load_global(base, step, var=var)
 
             if im is None:
                 im = ax.imshow(U, origin="lower", vmin=vmin, vmax=vmax, cmap=args.cmap)
@@ -172,12 +168,12 @@ def cmd_watch(args):
 
 
 def cmd_interactive(args):
-    steps = io.list_available_steps(args.dir, fmt=args.fmt)
+    steps = io.list_available_steps(args.dir)
     if not steps:
         raise SystemExit("No snapshots found")
 
     idx = 0
-    U = io.load_global(args.dir, steps[idx], fmt=args.fmt, var=args.var)
+    U = io.load_global(args.dir, steps[idx], var=args.var)
 
     fig, ax = plt.subplots()
     im = ax.imshow(U, origin="lower", cmap=args.cmap)
@@ -189,7 +185,7 @@ def cmd_interactive(args):
             idx = min(idx + 1, len(steps) - 1)
         elif event.key == "left":
             idx = max(idx - 1, 0)
-        U = io.load_global(args.dir, steps[idx], fmt=args.fmt, var=args.var)
+        U = io.load_global(args.dir, steps[idx], var=args.var)
         im.set_data(U)
         ttl.set_text(f"Step {steps[idx]}")
         fig.canvas.draw_idle()
@@ -208,7 +204,6 @@ def build_parser() -> argparse.ArgumentParser:
     # show
     ps = sub.add_parser("show", help="Render a single snapshot")
     ps.add_argument("--dir", required=True)
-    ps.add_argument("--fmt", choices=["csv", "nc"], default="csv")
     ps.add_argument("--var", default="u")
     ps.add_argument("--step", type=int)
     ps.add_argument("--title")
@@ -227,8 +222,6 @@ def build_parser() -> argparse.ArgumentParser:
     pc = sub.add_parser("compare", help="Side-by-side comparison")
     pc.add_argument("--dir-a", required=True)
     pc.add_argument("--dir-b", required=True)
-    pc.add_argument("--fmt-a", choices=["csv", "nc"], default="csv")
-    pc.add_argument("--fmt-b", choices=["csv", "nc"], default="nc")
     pc.add_argument("--var-a", default="u")
     pc.add_argument("--var-b", default="u")
     pc.add_argument("--step", type=int, required=True)
@@ -251,7 +244,6 @@ def build_parser() -> argparse.ArgumentParser:
     # animate
     pa = sub.add_parser("animate", help="Create animation")
     pa.add_argument("--dir", required=True)
-    pa.add_argument("--fmt", choices=["csv", "nc"], default="csv")
     pa.add_argument("--var", default="u")
     group_sel = pa.add_mutually_exclusive_group()
     group_sel.add_argument("--steps")
@@ -276,7 +268,6 @@ def build_parser() -> argparse.ArgumentParser:
     # watch
     p_w = sub.add_parser("watch", help="Live view of outputs")
     p_w.add_argument("--dir", default="outputs")
-    p_w.add_argument("--fmt", choices=["csv", "nc"], default="csv")
     p_w.add_argument("--var", default="u")
     p_w.add_argument("--interval", type=float, default=0.5)
     p_w.add_argument("--cmap", default="viridis")
@@ -291,7 +282,6 @@ def build_parser() -> argparse.ArgumentParser:
     # interactive
     pi = sub.add_parser("interactive", help="Interactive navigation")
     pi.add_argument("--dir", required=True)
-    pi.add_argument("--fmt", choices=["csv", "nc"], default="csv")
     pi.add_argument("--var", default="u")
     pi.add_argument("--cmap", default="viridis")
     pi.set_defaults(func=cmd_interactive)

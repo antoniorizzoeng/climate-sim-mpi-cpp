@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
@@ -9,9 +7,6 @@ from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from .io import load_global, list_available_steps
-
-__all__ = ["imshow_field", "compare_fields", "animate_from_outputs"]
-
 
 def add_overlays(ax, U,
                  show_minmax=False,
@@ -61,8 +56,6 @@ def imshow_field(
     cmap: str = "viridis",
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    extent: Optional[Tuple[float, float, float, float]] = None,
-    colorbar: bool = True,
     ax: Optional[plt.Axes] = None,
     show: bool = False,
     save: Optional[str] = None,
@@ -76,7 +69,7 @@ def imshow_field(
     else:
         fig = ax.figure
 
-    im, _ = _imshow_with_colorbar(ax, U, cmap, vmin, vmax)
+    _imshow_with_colorbar(ax, U, cmap, vmin, vmax)
     if title:
         ax.set_title(title)
 
@@ -99,7 +92,6 @@ def compare_fields(
     B: np.ndarray,
     titles: Tuple[str, str] = ("A", "B"),
     cmap: str = "viridis",
-    share_colorbar: bool = True,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     show_diff: bool = True,
@@ -124,12 +116,12 @@ def compare_fields(
     else:
         axA, axB, axD = axes
 
-    imA, _ = _imshow_with_colorbar(axA, A, cmap, vmin, vmax)
+    _imshow_with_colorbar(axA, A, cmap, vmin, vmax)
     axA.set_title(titles[0])
     add_overlays(axA, A, show_minmax=overlay_minmax,
                  show_rankboxes=overlay_rankboxes)
 
-    imB, _ = _imshow_with_colorbar(axB, B, cmap, vmin, vmax)
+    _imshow_with_colorbar(axB, B, cmap, vmin, vmax)
     axB.set_title(titles[1])
     add_overlays(axB, B, show_minmax=overlay_minmax,
                  show_rankboxes=overlay_rankboxes)
@@ -139,7 +131,7 @@ def compare_fields(
         if diff_vlim is None:
             m = np.nanmax(np.abs(D))
             diff_vlim = 1e-16 if m == 0 else m
-        imD, _ = _imshow_with_colorbar(axD, D, diff_cmap,
+        _imshow_with_colorbar(axD, D, diff_cmap,
                                        -diff_vlim, diff_vlim)
         axD.set_title("B - A")
 
@@ -153,7 +145,6 @@ def compare_fields(
 
 def animate_from_outputs(
     base_outputs_dir: str,
-    fmt: str = "csv",
     var: str = "u",
     steps: Optional[Sequence[int]] = None,
     interval_ms: int = 150,
@@ -172,16 +163,16 @@ def animate_from_outputs(
     rank_layout=None,
 ):
     if steps is None:
-        steps = list_available_steps(base_outputs_dir, fmt=fmt)
+        steps = list_available_steps(base_outputs_dir)
     if not steps:
         raise RuntimeError(
-            f"No steps found in {base_outputs_dir}/snapshots for fmt='{fmt}'"
+            f"No steps found in {base_outputs_dir}/snapshots"
         )
 
-    U0 = load_global(base_outputs_dir, steps[0], fmt=fmt, var=var)
+    U0 = load_global(base_outputs_dir, steps[0], var=var)
     if vmin is None or vmax is None:
         vals = [U0.min(), U0.max()]
-        U_last = load_global(base_outputs_dir, steps[-1], fmt=fmt, var=var)
+        U_last = load_global(base_outputs_dir, steps[-1], var=var)
         vals += [U_last.min(), U_last.max()]
         vmin = min(vals) if vmin is None else vmin
         vmax = max(vals) if vmax is None else vmax
@@ -198,7 +189,7 @@ def animate_from_outputs(
 
     def _update(frame_idx: int):
         step = steps[frame_idx]
-        U = load_global(base_outputs_dir, step, fmt=fmt, var=var)
+        U = load_global(base_outputs_dir, step, var=var)
         im.set_data(U)
         ttl.set_text(f"{title_prefix}: {step}")
         add_overlays(ax, U,

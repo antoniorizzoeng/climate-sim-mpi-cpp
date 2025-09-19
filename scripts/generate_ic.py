@@ -2,13 +2,8 @@
 import numpy as np
 import os
 import argparse
-import sys
+from netCDF4 import Dataset
 
-try:
-    from netCDF4 import Dataset
-    HAS_NETCDF = True
-except ImportError:
-    HAS_NETCDF = False
 
 def make_gaussian_ic(Nx=256, Ny=512, dx=1.0, dy=1.0,
                      A=1.0, sigma_frac=0.05, xc_frac=0.5, yc_frac=0.5):
@@ -29,8 +24,6 @@ def write_bin(U, out_path):
     print(f"[bin] Initial condition written to {out_path}")
 
 def write_netcdf(U, out_path, dx=1.0, dy=1.0, var="u"):
-    if not HAS_NETCDF:
-        raise RuntimeError("netCDF4 not available, install with `pip install netCDF4`")
     Ny, Nx = U.shape
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with Dataset(out_path, "w", format="NETCDF4") as nc:

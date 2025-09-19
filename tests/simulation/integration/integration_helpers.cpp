@@ -2,26 +2,6 @@
 
 int run_cmd(const std::string& cmd) { return std::system(cmd.c_str()); }
 
-std::vector<std::vector<double>> read_csv_2d(const fs::path& p) {
-    std::ifstream ifs(p);
-    if (!ifs.good())
-        throw std::runtime_error("Failed to open " + p.string());
-    std::vector<std::vector<double>> grid;
-    std::string line;
-    while (std::getline(ifs, line)) {
-        std::vector<double> row;
-        std::stringstream ss(line);
-        std::string tok;
-        while (std::getline(ss, tok, ',')) {
-            if (!tok.empty())
-                row.push_back(std::stod(tok));
-        }
-        if (!row.empty())
-            grid.push_back(std::move(row));
-    }
-    return grid;
-}
-
 std::vector<double> read_bin_plane(const fs::path& p, int nx, int ny) {
     std::ifstream ifs(p, std::ios::binary);
     if (!ifs.good())
@@ -33,7 +13,6 @@ std::vector<double> read_bin_plane(const fs::path& p, int nx, int ny) {
     return buf;
 }
 
-#ifdef HAS_NETCDF
 std::vector<std::vector<double>> read_nc_2d(const fs::path& p, const char* var) {
     int ncid;
     if (nc_open(p.c_str(), NC_NOWRITE, &ncid) != NC_NOERR)
@@ -89,7 +68,6 @@ std::vector<std::vector<double>> read_nc_2d(const fs::path& p, const char* var) 
         for (size_t i = 0; i < nx; ++i) grid[j][i] = flat[j * nx + i];
     return grid;
 }
-#endif
 
 std::vector<RankTile> read_rank_layout(const fs::path& p) {
     std::ifstream ifs(p);
@@ -128,51 +106,6 @@ std::vector<RankTile> read_rank_layout(const fs::path& p) {
     return tiles;
 }
 
-static std::vector<std::vector<double>> assemble_global_csv_snapshot_impl(const std::string& dir,
-                                                                          int step) {
-    auto tiles = read_rank_layout("outputs/rank_layout.csv");
-    if (tiles.empty())
-        throw std::runtime_error("rank_layout.csv has no tiles");
-
-    const int NX = tiles[0].nxg;
-    const int NY = tiles[0].nyg;
-    std::vector<std::vector<double>> U(NY, std::vector<double>(NX, 0.0));
-
-    for (const auto& t : tiles) {
-        char buf[256];
-        std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.csv", step, t.rank);
-        fs::path f = fs::path(dir) / buf;
-        if (!fs::exists(f))
-            throw std::runtime_error("Missing snapshot: " + f.string());
-
-        auto tile = read_csv_2d(f);
-        if (tile.empty())
-            throw std::runtime_error("Empty tile: " + f.string());
-
-        const int ny_csv = (int)tile.size();
-        const int nx_csv = (int)tile[0].size();
-        const int expect_ny = t.ny + 2 * t.halo;
-        const int expect_nx = t.nx + 2 * t.halo;
-        if (ny_csv != expect_ny || nx_csv != expect_nx)
-            throw std::runtime_error("CSV tile shape mismatch");
-
-        for (int j = 0; j < t.ny; ++j)
-            for (int i = 0; i < t.nx; ++i)
-                U[t.y_off + j][t.x_off + i] = tile[j + t.halo][i + t.halo];
-    }
-    return U;
-}
-
-std::vector<std::vector<double>> assemble_global_csv_snapshot(int step) {
-    return assemble_global_csv_snapshot_impl("outputs/snapshots", step);
-}
-
-std::vector<std::vector<double>> assemble_global_csv_snapshot_from(const std::string& dir,
-                                                                   int step) {
-    return assemble_global_csv_snapshot_impl(dir, step);
-}
-
-#ifdef HAS_NETCDF
 std::vector<std::vector<double>> assemble_global_nc_snapshot_from(const std::string& dir,
                                                                   int step,
                                                                   const char* var) {
@@ -211,7 +144,6 @@ std::vector<std::vector<double>> assemble_global_nc_snapshot_from(const std::str
     }
     return U;
 }
-#endif
 
 double sum2d(const std::vector<std::vector<double>>& A) {
     double s = 0.0;

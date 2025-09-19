@@ -24,15 +24,13 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
   - Constant zero
   - Gaussian hotspot
   - Binary / NetCDF input
-- Output formats:
-  - CSV (default, portable)
-  - NetCDF (with attributes, compression, chunking planned)
+- Output format: NetCDF
 - Configurable via YAML and CLI overrides.
 - Timing statistics logged at end of run.
 
 ### Visualization (Python)
 - Reassemble distributed per-rank snapshots into global arrays.
-- Supported formats: CSV and NetCDF.
+- Supported format: NetCDF.
 - Plot utilities:
   - Single field plots with colorbars.
   - Field comparison with optional difference panel.
@@ -50,7 +48,7 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - C++17 compiler
 - CMake ≥ 3.16
 - MPI implementation (OpenMPI, MPICH, etc.)
-- Optional: NetCDF-C library
+- NetCDF-C library
 
 ## Build & Run
 
@@ -63,7 +61,7 @@ make -j
 Run simulation (example, 4 MPI ranks):
 
 ```bash
-mpirun --oversubscribe -np 4 ./src/climate_sim --config=configs/dev.yaml --output.format=netcdf
+mpirun --oversubscribe -np 4 ./src/climate_sim --config=configs/dev.yaml
 ```
 
 ### Python (visualization)
@@ -81,16 +79,16 @@ pip install -r requirements.txt
 
 ```bash
 # Rebuild and save single frame
-python -m visualization.cli show --dir outputs --step 10 --fmt csv --save frame.png
+python -m visualization.cli show --dir outputs --step 10 --save frame.png
 
 # Animate all steps into a GIF
-python -m visualization.cli animate --dir outputs --fmt csv --save anim.gif --writer pillow
+python -m visualization.cli animate --dir outputs --save anim.gif --writer pillow
 
 # Watch live simulation outputs
-python -m visualization.cli watch --dir outputs --fmt csv --interval 1.0
+python -m visualization.cli watch --dir outputs --interval 1.0
 
 # Interactive simulation viz
-python -m visualization.cli interactive --dir outputs --fmt csv
+python -m visualization.cli interactive --dir outputs
 ```
 ---
 

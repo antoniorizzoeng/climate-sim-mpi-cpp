@@ -3,7 +3,6 @@
 #include "integration_helpers.hpp"
 
 TEST(Integration_Main, NetCDF_IC_Equivalence_WithBinaryIC) {
-#ifdef HAS_NETCDF
     fs::remove_all("inputs");
     fs::create_directories("inputs");
     fs::remove_all("outputs");
@@ -62,7 +61,4 @@ TEST(Integration_Main, NetCDF_IC_Equivalence_WithBinaryIC) {
     ASSERT_EQ(U_nc[0].size(), U_bin[0].size());
     for (size_t j = 0; j < U_nc.size(); ++j)
         for (size_t i = 0; i < U_nc[j].size(); ++i) ASSERT_NEAR(U_nc[j][i], U_bin[j][i], 1e-12);
-#else
-    GTEST_SKIP() << "NetCDF not enabled in build";
-#endif
 }

@@ -15,13 +15,14 @@ TEST(Integration, Diffusion_DecreasesPeak) {
         << " --ic.mode=preset --ic.preset=gaussian_hotspot --ic.A=1.0 --ic.sigma_frac=0.1";
     ASSERT_EQ(run_cmd(cmd.str()), 0);
 
-    fs::path snap0_r0 = fs::path("outputs/snapshots") / "snapshot_00000_rank00000.csv";
-    fs::path snap10_r0 = fs::path("outputs/snapshots") / "snapshot_00010_rank00000.csv";
+    fs::path snap0_r0 = fs::path("outputs/snapshots") / "snapshot_00000_rank00000.nc";
+    fs::path snap10_r0 = fs::path("outputs/snapshots") / "snapshot_00010_rank00000.nc";
     ASSERT_TRUE(fs::exists(snap0_r0));
     ASSERT_TRUE(fs::exists(snap10_r0));
 
-    auto U0 = assemble_global_csv_snapshot(0);
-    auto U10 = assemble_global_csv_snapshot(10);
+    auto U0 = assemble_global_nc_snapshot_from("outputs/snapshots", 0, "u");
+    auto U10 = assemble_global_nc_snapshot_from("outputs/snapshots", 10, "u");
+
     ASSERT_FALSE(U0.empty());
     ASSERT_FALSE(U10.empty());
     ASSERT_EQ(U0.size(), 64u);
