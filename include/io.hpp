@@ -34,8 +34,6 @@ struct SimConfig {
 
     std::string output_prefix = "snap";
 
-    std::string output_format = "csv";
-
     ICConfig ic{};
 
     void validate() const;
@@ -53,7 +51,6 @@ struct CLIOverrides {
     std::optional<BCType> bc;
 
     std::optional<std::string> output_prefix;
-    std::optional<std::string> output_format;
 
     struct {
         std::optional<std::string> mode, preset, path, format, var;
@@ -62,11 +59,11 @@ struct CLIOverrides {
 };
 
 SimConfig load_yaml_file(const std::string& path);
+
 CLIOverrides parse_cli_overrides(const std::vector<std::string>& args);
+
 SimConfig merged_config(const std::optional<std::string>& yaml_path,
                         const std::vector<std::string>& cli_args);
-
-void write_field_csv(const Field& f, const std::string& filename);
 
 BCType bc_from_string(const std::string& s);
 std::string bc_to_string(BCType bc);
@@ -80,8 +77,6 @@ void write_rank_layout_csv(const std::string& path,
                            int nx_local,
                            int ny_local,
                            int halo);
-
-std::string snapshot_filename(const std::string& outdir, int step, int rank);
 
 std::string snapshot_filename_nc(const std::string& outdir, int step, int rank);
 

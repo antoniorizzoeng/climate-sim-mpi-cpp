@@ -71,7 +71,6 @@ TEST(Unit_Init_IC, GaussianHotspotPreset) {
     EXPECT_TRUE(has_nonzero);
 }
 
-#ifdef HAS_NETCDF
 TEST(Unit_Init, NetCDFIC_SucceedsAndMissingVarThrows) {
     auto dec = make_decomp(8, 6, 8, 6);
     Field u(dec.nx_local, dec.ny_local, 1, 1.0, 1.0);
@@ -124,7 +123,6 @@ TEST(Unit_Init_IC, NetCDFNotBuiltThrows) {
 
     EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
 }
-#endif
 
 TEST(Unit_Init_IC, UnsupportedFormatThrows) {
     auto dec = make_decomp(4, 4, 4, 4);

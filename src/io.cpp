@@ -1,5 +1,6 @@
 #include "io.hpp"
 
+#include <netcdf.h>
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
@@ -121,10 +122,8 @@ SimConfig load_yaml_file(const std::string& path) {
     if (root["output"]) {
         auto o = root["output"];
         assign_if(o, "prefix", cfg.output_prefix);
-        assign_if(o, "format", cfg.output_format);
     } else {
         assign_if(root, "output_prefix", cfg.output_prefix);
-        assign_if(root, "output_format", cfg.output_format);
     }
 
     if (root["ic"]) {
@@ -242,11 +241,6 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
         if (try_set_str(a, "output_prefix", o.output_prefix, i))
             continue;
 
-        if (try_set_str(a, "output.format", o.output_format, i))
-            continue;
-        if (try_set_str(a, "output_format", o.output_format, i))
-            continue;
-
         if (try_set_str(a, "ic.mode", o.ic.mode, i))
             continue;
         if (try_set_str(a, "ic.preset", o.ic.preset, i))
@@ -298,8 +292,6 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
 
     if (o.output_prefix)
         base.output_prefix = *o.output_prefix;
-    if (o.output_format)
-        base.output_format = *o.output_format;
 
     if (o.ic.mode)
         base.ic.mode = *o.ic.mode;
@@ -334,20 +326,6 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
     return cfg;
 }
 
-void write_field_csv(const Field& f, const std::string& filename) {
-    std::ofstream ofs(filename);
-    ofs.setf(std::ios::scientific);
-    ofs << std::setprecision(std::numeric_limits<double>::max_digits10);
-    for (int j = 0; j < f.ny_total(); ++j) {
-        for (int i = 0; i < f.nx_total(); ++i) {
-            ofs << f.at(i, j);
-            if (i < f.nx_total() - 1)
-                ofs << ",";
-        }
-        ofs << "\n";
-    }
-}
-
 void write_rank_layout_csv(const std::string& path,
                            int rank,
                            int nx_global,
@@ -371,16 +349,6 @@ void write_rank_layout_csv(const std::string& path,
         << halo << "," << nx_global << "," << ny_global << "\n";
 }
 
-std::string snapshot_filename(const std::string& outdir, int step, int rank) {
-    fs::create_directories(outdir);
-    char buf[256];
-    std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.csv", step, rank);
-    return (fs::path(outdir) / buf).string();
-}
-
-#ifdef HAS_NETCDF
-#include <netcdf.h>
-
 static inline void nc_throw_if(int status, const char* where) {
     if (status != NC_NOERR) {
         std::ostringstream oss;
@@ -388,7 +356,6 @@ static inline void nc_throw_if(int status, const char* where) {
         throw std::runtime_error(oss.str());
     }
 }
-#endif
 
 std::string snapshot_filename_nc(const std::string& outdir, int step, int rank) {
     fs::create_directories(outdir);
@@ -398,7 +365,6 @@ std::string snapshot_filename_nc(const std::string& outdir, int step, int rank) 
 }
 
 bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D& /*dec*/) {
-#ifdef HAS_NETCDF
     int ncid;
     int status = nc_create(filename.c_str(), NC_NETCDF4 | NC_CLOBBER, &ncid);
     if (status != NC_NOERR)
@@ -445,9 +411,4 @@ bool write_field_netcdf(const Field& f, const std::string& filename, const Decom
 
     nc_close(ncid);
     return true;
-#else
-    (void)f;
-    (void)filename;
-    return false;
-#endif
 }

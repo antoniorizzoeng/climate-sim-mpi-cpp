@@ -1,4 +1,3 @@
-#ifdef HAS_NETCDF
 #include <gtest/gtest.h>
 
 #include "integration_helpers.hpp"
@@ -33,4 +32,3 @@ TEST(Integration, NetCDFOutput_WritesAndIsReadable) {
     EXPECT_LE(mx, 1.0);
     EXPECT_GT(mx, 1e-6);
 }
-#endif

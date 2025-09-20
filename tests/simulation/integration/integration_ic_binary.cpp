@@ -26,7 +26,7 @@ TEST(Integration, BinaryIC_LoadsCorrectMinMax) {
         << " --ic.mode=file --ic.format=bin --ic.path=inputs/ic_global.bin";
     ASSERT_EQ(run_cmd(cmd.str()), 0);
 
-    auto full = assemble_global_csv_snapshot(0);
+    auto full = assemble_global_nc_snapshot_from("outputs/snapshots", 0, "u");
     ASSERT_EQ(full.size(), 32u);
     ASSERT_EQ(full[0].size(), 64u);
 

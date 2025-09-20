@@ -2,7 +2,7 @@
 
 #include "integration_helpers.hpp"
 
-TEST(Integration, Advection_ShiftsHotspotRight) {
+TEST(Integration, Advection_ShiftsHotspotRight_NC) {
     fs::remove_all("outputs");
 
     std::ostringstream cmd;
@@ -11,11 +11,12 @@ TEST(Integration, Advection_ShiftsHotspotRight) {
         << " --D=0 --vx=1 --vy=0"
         << " --dt=1 --steps=6 --out_every=1"
         << " --bc=periodic"
-        << " --ic.mode=preset --ic.preset=gaussian_hotspot --ic.sigma_frac=0.1 --ic.A=1.0";
+        << " --ic.mode=preset --ic.preset=gaussian_hotspot"
+        << " --ic.sigma_frac=0.1 --ic.A=1.0";
     ASSERT_EQ(run_cmd(cmd.str()), 0);
 
-    auto U0 = assemble_global_csv_snapshot(0);
-    auto U5 = assemble_global_csv_snapshot(5);
+    auto U0 = assemble_global_nc_snapshot_from("outputs/snapshots", 0, "u");
+    auto U5 = assemble_global_nc_snapshot_from("outputs/snapshots", 5, "u");
 
     double x0 = com_x(U0);
     double x5 = com_x(U5);

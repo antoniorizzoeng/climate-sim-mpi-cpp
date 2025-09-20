@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <netcdf.h>
 
 #include <fstream>
 #include <string>
@@ -8,10 +9,6 @@
 #include "field.hpp"
 #include "init.hpp"
 #include "io.hpp"
-
-#ifdef HAS_NETCDF
-#include <netcdf.h>
-#endif
 
 static std::string cfg_path(const char* fname) {
 #ifdef CONFIGS_DIR
@@ -58,11 +55,11 @@ TEST(Unit_IO_CLI, SimpleScalarOverrides) {
 
     SimConfig merged = merged_config(tmpfile, args);
 
-    EXPECT_EQ(merged.nx, 128);                       // CLI wins
-    EXPECT_EQ(merged.ny, 256);                       // CLI wins
-    EXPECT_DOUBLE_EQ(merged.dt, 0.2);                // CLI wins
-    EXPECT_EQ(bc_to_string(merged.bc), "periodic");  // CLI wins
-    EXPECT_EQ(merged.output_prefix, "from_cli");     // CLI wins
+    EXPECT_EQ(merged.nx, 128);
+    EXPECT_EQ(merged.ny, 256);
+    EXPECT_DOUBLE_EQ(merged.dt, 0.2);
+    EXPECT_EQ(bc_to_string(merged.bc), "periodic");
+    EXPECT_EQ(merged.output_prefix, "from_cli");
 }
 
 TEST(Unit_IO_CLI, ICOverridesTakePrecedence) {
@@ -151,26 +148,7 @@ TEST(Unit_IO_CLI, MergedConfigNoYaml) {
     EXPECT_EQ(cfg.ny, 8);
 }
 
-TEST(Unit_IO_File, WriteAndReadCSV) {
-    Field f(2, 2, 0, 1.0, 1.0);
-    f.at(0, 0) = 1.1;
-    f.at(1, 0) = 2.2;
-    f.at(0, 1) = 3.3;
-    f.at(1, 1) = 4.4;
-
-    const std::string fname = "field.csv";
-    write_field_csv(f, fname);
-
-    std::ifstream ifs(fname);
-    std::string line;
-    std::getline(ifs, line);
-    EXPECT_NE(line.find("1.1"), std::string::npos);
-    std::remove(fname.c_str());
-}
-
 TEST(Unit_IO_File, SnapshotFilenames) {
-    auto csv = snapshot_filename("outdir", 7, 3);
-    EXPECT_NE(csv.find("snapshot_00007_rank00003.csv"), std::string::npos);
     auto nc = snapshot_filename_nc("outdir", 7, 3);
     EXPECT_NE(nc.find("snapshot_00007_rank00003.nc"), std::string::npos);
 }
@@ -187,7 +165,6 @@ TEST(Unit_IO_File, RankLayoutAppendAndHeader) {
     std::remove(fname.c_str());
 }
 
-#ifdef HAS_NETCDF
 TEST(Unit_IO_File, WriteNetCDFAndReadBack) {
     auto dec = make_decomp(2, 2, 2, 2);
     Field f(2, 2, 0, 1.0, 1.0);
@@ -209,4 +186,3 @@ TEST(Unit_IO_File, WriteNetCDFAndReadBack) {
 
     std::remove(fname.c_str());
 }
-#endif

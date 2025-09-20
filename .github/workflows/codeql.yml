@@ -26,7 +26,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build g++ make \
             libopenmpi-dev openmpi-bin \
-            libyaml-cpp-dev
+            libyaml-cpp-dev \
+            libnetcdf-dev libnetcdf-c++4-dev netcdf-bin
       - name: Build (compile for CodeQL)
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF

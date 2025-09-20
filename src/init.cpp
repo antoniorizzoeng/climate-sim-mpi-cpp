@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <netcdf>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -80,9 +81,6 @@ void apply_initial_condition(const Decomp2D& dec, Field& u, const SimConfig& cfg
     }
 }
 
-#ifdef HAS_NETCDF
-#include <netcdf>
-using namespace netCDF;
 static inline void nc_check(int status, const char* where) {
     if (status != NC_NOERR) {
         std::ostringstream oss;
@@ -174,8 +172,3 @@ bool ic_from_netcdf_global(const Decomp2D& dec,
     }
     return true;
 }
-#else
-bool ic_from_netcdf_global(const Decomp2D&, Field&, const std::string&, const std::string&) {
-    return false;  // Not built with NetCDF; caller throws
-}
-#endif

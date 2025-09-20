@@ -11,7 +11,7 @@ This page shows how to build, run, and visualize a small demo locally.
 
 - C++17 compiler and CMake ≥ 3.21
 - MPI (OpenMPI or MPICH)
-- (Optional) NetCDF C library (`libnetcdf-dev`) if you want NetCDF inputs/outputs
+- NetCDF C library (`libnetcdf-dev`)
 - Python 3.11+ for visualization: `pip install -r requirements.txt`
 
 ## Build
@@ -49,26 +49,26 @@ ic:
 
 ### Single frame (snapshot)
 ```bash
-python -m visualization.cli show --dir outputs --fmt nc --step 400 --save demo_frame.png       --overlay-minmax --overlay-rankgrid --overlay-rankboxes
+python -m visualization.cli show --dir outputs --step 400 --save demo_frame.png       --overlay-minmax --overlay-rankgrid --overlay-rankboxes
 ```
 
 ### Animation
 ```bash
 # MP4 (requires ffmpeg)
-python -m visualization.cli animate --dir outputs --fmt nc --fps 24 --save demo.mp4       --overlay-minmax --overlay-rankgrid
+python -m visualization.cli animate --dir outputs --fps 24 --save demo.mp4       --overlay-minmax --overlay-rankgrid
 
 # GIF (using Pillow)
-python -m visualization.cli animate --dir outputs --fmt nc --fps 12 --save demo.gif --writer pillow
+python -m visualization.cli animate --dir outputs --fps 12 --save demo.gif --writer pillow
 ```
 
 ### Live watch (while sim is running)
 ```bash
-python -m visualization.cli watch --dir outputs --fmt nc --interval 0.5
+python -m visualization.cli watch --dir outputs --interval 0.5
 ```
 
 ### Interactive navigation (←/→ to step frames)
 ```bash
-python -m visualization.cli interactive --dir outputs --fmt nc --var u
+python -m visualization.cli interactive --dir outputs --var u
 ```
 
 ## Tips

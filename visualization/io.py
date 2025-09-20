@@ -1,19 +1,10 @@
-from __future__ import annotations
-
 import os
 import re
 import csv
 from dataclasses import dataclass
 from typing import List
-
 import numpy as np
-
-try:
-    import netCDF4
-    _HAS_NETCDF4 = True
-except Exception:
-    _HAS_NETCDF4 = False
-
+import netCDF4
 
 @dataclass(frozen=True)
 class RankTile:
@@ -65,20 +56,7 @@ def _list_snapshot_files(snap_dir: str, step: int, ext: str) -> List[str]:
         raise FileNotFoundError(f"no snapshots for step={step} in {snap_dir} (*.{ext})")
     return [os.path.join(snap_dir, f) for f in files]
 
-
-def _read_csv_tile(path: str) -> np.ndarray:
-    try:
-        arr = np.loadtxt(path, delimiter=",")
-    except Exception as e:
-        raise RuntimeError(f"failed to read CSV tile {path}: {e}") from e
-    if arr.ndim != 2:
-        raise RuntimeError(f"CSV tile not 2D: {path}")
-    return np.asarray(arr, dtype=float)
-
-
 def _read_nc_tile(path: str, var: str) -> np.ndarray:
-    if not _HAS_NETCDF4:
-        raise ImportError("netCDF4 not installed; cannot read NetCDF snapshots")
     try:
         with netCDF4.Dataset(path, "r") as ds:
             if var not in ds.variables:
@@ -113,29 +91,6 @@ def _place_tile(U: np.ndarray, tile: np.ndarray, t: RankTile) -> None:
     U[t.y_off : t.y_off + t.ny, t.x_off : t.x_off + t.nx] = \
         tile[off : off + t.ny, off : off + t.nx]
 
-
-def assemble_global_csv(base_outputs_dir: str, step: int) -> np.ndarray:
-    tiles = _read_rank_layout(os.path.join(base_outputs_dir, "rank_layout.csv"))
-    snap_dir = _snapshots_dir(base_outputs_dir)
-    files = _list_snapshot_files(snap_dir, step, "csv")
-
-    U = np.zeros((tiles[0].nyg, tiles[0].nxg), dtype=float)
-    by_rank = {}
-    for f in files:
-        m = re.search(r"_rank(\d{5})\.csv$", f)
-        if m:
-            by_rank[int(m.group(1))] = f
-
-    for t in tiles:
-        path = by_rank.get(t.rank)
-        if path is None:
-            raise FileNotFoundError(f"missing CSV tile for rank {t.rank} at step {step}")
-        tile = _read_csv_tile(path)
-        _place_tile(U, tile, t)
-
-    return U
-
-
 def assemble_global_netcdf(base_outputs_dir: str, step: int, var: str = "u") -> np.ndarray:
     tiles = _read_rank_layout(os.path.join(base_outputs_dir, "rank_layout.csv"))
     snap_dir = _snapshots_dir(base_outputs_dir)
@@ -158,11 +113,9 @@ def assemble_global_netcdf(base_outputs_dir: str, step: int, var: str = "u") -> 
     return U
 
 
-def list_available_steps(base_outputs_dir: str, fmt: str = "csv") -> List[int]:
+def list_available_steps(base_outputs_dir: str) -> List[int]:
     snap_dir = _snapshots_dir(base_outputs_dir)
-    if fmt not in ("csv", "nc"):
-        raise ValueError("fmt must be 'csv' or 'nc'")
-    pat = re.compile(rf"^snapshot_(\d{{5}})_rank\d{{5}}\.(?:{fmt})$")
+    pat = re.compile(rf"^snapshot_(\d{{5}})_rank\d{{5}}\.(?:nc)$")
     steps = set()
     for name in os.listdir(snap_dir):
         m = pat.match(name)
@@ -171,10 +124,5 @@ def list_available_steps(base_outputs_dir: str, fmt: str = "csv") -> List[int]:
     return sorted(steps)
 
 
-def load_global(base_outputs_dir: str, step: int, fmt: str = "csv", var: str = "u") -> np.ndarray:
-    if fmt == "csv":
-        return assemble_global_csv(base_outputs_dir, step)
-    elif fmt == "nc":
-        return assemble_global_netcdf(base_outputs_dir, step, var=var)
-    else:
-        raise ValueError("fmt must be 'csv' or 'nc'")
+def load_global(base_outputs_dir: str, step: int, var: str = "u") -> np.ndarray:
+    return assemble_global_netcdf(base_outputs_dir, step, var=var)

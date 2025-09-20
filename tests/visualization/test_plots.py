@@ -1,71 +1,23 @@
-import os
 import numpy as np
 import pytest
 
 import matplotlib.pyplot as plt
-
-from visualization.plots import (
-    add_overlays,
-    _imshow_with_colorbar,
-    imshow_field,
-    compare_fields,
-    animate_from_outputs,
-)
-from visualization.io import assemble_global_csv
-from tests.visualization.sample_data import (
-    make_tiles_nx_ny,
-    write_rank_layout,
-    write_csv_snapshots,
-)
-
-def _seed_csv_case(base_outputs_dir, step=0, nxg=8, nyg=6):
-    tiles = make_tiles_nx_ny(nxg, nyg, halo=1)
-    write_rank_layout(base_outputs_dir, tiles)
-
-    def field_fn(t):
-        ny, nx = t["ny"], t["nx"]
-        y0, x0 = t["y_off"], t["x_off"]
-        yy = np.linspace(0, 1, ny)[:, None]
-        xx = np.linspace(0, 1, nx)[None, :]
-        return np.sin(2 * np.pi * (xx + yy))
-
-    write_csv_snapshots(base_outputs_dir, step=step, tiles=tiles, field_fn=field_fn)
-    return nxg, nyg
+from visualization import plots
 
 def test_add_overlays_minmax_and_rankgrid(tmp_path):
     fig, ax = plt.subplots()
     U = np.arange(9).reshape(3, 3)
     rank_layout = [(0, 0, 0, 3, 3)]
-    add_overlays(ax, U, show_minmax=True,
+    plots.add_overlays(ax, U, show_minmax=True,
                  show_rankgrid=True, show_rankboxes=True,
                  rank_layout=rank_layout)
-    # Should have added both text and rectangle
     assert any(isinstance(child, plt.Text) for child in ax.get_children())
     assert any(isinstance(child, plt.Rectangle) for child in ax.patches)
-
-def test_imshow_field_with_overlays_and_show(monkeypatch, tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    U = assemble_global_csv(tmp_outputs_dir, 0)
-
-    called = {}
-    monkeypatch.setattr(plt, "show", lambda: called.setdefault("shown", True))
-
-    fig, ax = imshow_field(
-        U,
-        title="demo",
-        overlay_minmax=True,
-        overlay_rankgrid=True,
-        overlay_rankboxes=True,
-        rank_layout=[(0, 0, 0, U.shape[1], U.shape[0])],
-        show=True,
-    )
-    assert "shown" in called
-    plt.close(fig)
 
 def test__imshow_with_colorbar_returns_im_and_cb():
     fig, ax = plt.subplots()
     U = np.ones((4, 4))
-    im, cb = _imshow_with_colorbar(ax, U, "viridis", None, None)
+    im, cb = plots._imshow_with_colorbar(ax, U, "viridis", None, None)
     assert im.get_array().shape == (4, 4)
     assert cb.ax in fig.axes
     plt.close(fig)
@@ -73,7 +25,7 @@ def test__imshow_with_colorbar_returns_im_and_cb():
 def test_compare_fields_with_diff_and_overlays():
     A = np.zeros((4, 4))
     B = np.ones((4, 4))
-    fig, axes = compare_fields(A, B,
+    fig, axes = plots.compare_fields(A, B,
                                titles=("A", "B"),
                                show_diff=True,
                                overlay_minmax=True,
@@ -81,63 +33,15 @@ def test_compare_fields_with_diff_and_overlays():
     assert len(axes) == 3
     plt.close(fig)
 
-def test_compare_fields_no_diff_split_colorbar():
-    A = np.zeros((2, 2))
-    B = np.ones((2, 2))
-    fig, axes = compare_fields(A, B,
-                               show_diff=False,
-                               share_colorbar=False)
-    assert len(axes) == 2
-    plt.close(fig)
-
 def test_animate_from_outputs_runtime_error(tmp_path):
     with pytest.raises(RuntimeError):
-        animate_from_outputs(str(tmp_path), fmt="csv", steps=[])
-
-def test_animate_from_outputs_autoscale_and_show(monkeypatch, tmp_outputs_dir):
-    steps = [0, 1]
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    _seed_csv_case(tmp_outputs_dir, step=1)
-
-    called = {}
-    monkeypatch.setattr(plt, "show", lambda: called.setdefault("shown", True))
-
-    out = os.path.join(tmp_outputs_dir, "anim.gif")
-    anim, fig, ax = animate_from_outputs(
-        tmp_outputs_dir,
-        fmt="csv",
-        steps=steps,
-        save=out,
-        writer=None,
-        show=True,
-    )
-    assert os.path.isfile(out)
-    assert "shown" in called
-    plt.close(fig)
-
-def test_animate_from_outputs_invalid_writer(tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    out = os.path.join(tmp_outputs_dir, "bad.gif")
-    with pytest.raises(ValueError):
-        animate_from_outputs(tmp_outputs_dir,
-                             fmt="csv",
-                             steps=[0],
-                             save=out,
-                             writer="invalid")
+        plots.animate_from_outputs(str(tmp_path), steps=[])
 
 def test_add_overlays_no_rank_layout():
     fig, ax = plt.subplots()
     U = np.zeros((2, 2))
-    add_overlays(ax, U, show_rankgrid=True, rank_layout=None)
+    plots.add_overlays(ax, U, show_rankgrid=True, rank_layout=None)
     plt.close(fig)
-
-def test_imshow_field_show_branch(monkeypatch, tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    U = assemble_global_csv(tmp_outputs_dir, 0)
-    monkeypatch.setattr(plt, "show", lambda: None)
-    fig, ax = imshow_field(U, show=True)
-    plt.close(fig)
-
 
 def test_compare_fields_autoscale_and_save_show(monkeypatch, tmp_path):
     A = np.zeros((3, 3))
@@ -145,57 +49,175 @@ def test_compare_fields_autoscale_and_save_show(monkeypatch, tmp_path):
     B[:] = A[:]
     monkeypatch.setattr(plt, "show", lambda: None)
     out = tmp_path / "cmp.png"
-    fig, axes = compare_fields(A, B, save=out, show=True)
+    fig, axes = plots.compare_fields(A, B, save=out, show=True)
     assert out.exists()
     plt.close(fig)
-
-def test_animate_from_outputs_steps_none_and_autoscale(tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    _seed_csv_case(tmp_outputs_dir, step=1)
-    out = os.path.join(tmp_outputs_dir, "anim.gif")
-    anim, fig, ax = animate_from_outputs(tmp_outputs_dir, fmt="csv", save=out, writer="pillow")
-    assert os.path.isfile(out)
-    plt.close(fig)
-
-
-def test_animate_from_outputs_ffmpeg_branch(monkeypatch, tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    out = os.path.join(tmp_outputs_dir, "anim.mp4")
-
-    def fake_save(*a, **k): raise Exception("ffmpeg fail")
-    monkeypatch.setattr("matplotlib.animation.FuncAnimation.save", fake_save)
-
-    with pytest.raises(RuntimeError):
-        animate_from_outputs(tmp_outputs_dir, fmt="csv", steps=[0], save=out, writer="ffmpeg")
 
 def test_add_overlays_with_rankgrid_no_layout():
     fig, ax = plt.subplots()
     U = np.zeros((2, 2))
-    add_overlays(ax, U, show_rankgrid=True, rank_layout=None)
+    plots.add_overlays(ax, U, show_rankgrid=True, rank_layout=None)
     plt.close(fig)
-
-
-def test_imshow_field_no_title_and_save(tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    U = assemble_global_csv(tmp_outputs_dir, 0)
-    out = os.path.join(tmp_outputs_dir, "frame2.png")
-    fig, ax = imshow_field(U, save=out)
-    assert os.path.exists(out)
-    plt.close(fig)
-
 
 def test_compare_fields_autoscale_and_diff_vlim_zero(monkeypatch):
     A = np.zeros((4, 4))
     B = np.zeros((4, 4))
     monkeypatch.setattr(plt, "show", lambda: None)
-    fig, axes = compare_fields(A, B, show_diff=True)
+    fig, axes = plots.compare_fields(A, B, show_diff=True)
+    plt.close(fig)
+
+def test_imshow_field_with_title_save_and_show(monkeypatch, tmp_path):
+    monkeypatch.setattr(plt, "show", lambda: None)
+    U = np.arange(16).reshape(4, 4)
+    out = tmp_path / "field.png"
+    fig, ax = plots.imshow_field(
+        U,
+        title="test",
+        save=out,
+        show=True,
+        overlay_minmax=True,
+        overlay_rankgrid=True,
+        overlay_rankboxes=True,
+        rank_layout=[(0, 0, 0, 4, 4)],
+    )
+    assert out.exists()
     plt.close(fig)
 
 
-def test_animate_from_outputs_autoscale_path(tmp_outputs_dir):
-    _seed_csv_case(tmp_outputs_dir, step=0)
-    _seed_csv_case(tmp_outputs_dir, step=1)
-    out = os.path.join(tmp_outputs_dir, "anim2.gif")
-    anim, fig, ax = animate_from_outputs(tmp_outputs_dir, fmt="csv", save=out, writer="pillow")
-    assert os.path.exists(out)
+def test_compare_fields_assertion_error():
+    A = np.zeros((2, 2))
+    B = np.zeros((3, 3))
+    with pytest.raises(AssertionError):
+        plots.compare_fields(A, B)
+
+
+def test_animate_from_outputs_value_error_writer(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0])
+    monkeypatch.setattr(
+        plots, "load_global", lambda d, s, var="u": np.zeros((2, 2))
+    )
+    with pytest.raises(ValueError):
+        plots.animate_from_outputs(str(tmp_path), save="out.xxx", writer="bad")
+
+
+def test_animate_from_outputs_ffmpeg_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0])
+    monkeypatch.setattr(
+        plots, "load_global", lambda d, s, var="u": np.zeros((2, 2))
+    )
+
+    class DummyAnim:
+        def save(self, *a, **k):
+            raise RuntimeError("ffmpeg missing")
+
+    monkeypatch.setattr(plots, "FuncAnimation", lambda *a, **k: DummyAnim())
+
+    with pytest.raises(RuntimeError):
+        plots.animate_from_outputs(str(tmp_path), save="out.mp4", writer="ffmpeg")
+
+
+def test_animate_from_outputs_with_pillow(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0])
+    monkeypatch.setattr(
+        plots, "load_global", lambda d, s, var="u": np.zeros((2, 2))
+    )
+
+    class DummyAnim:
+        def save(self, *a, **k):
+            return None
+
+    monkeypatch.setattr(plots, "FuncAnimation", lambda *a, **k: DummyAnim())
+    anim, fig, ax = plots.animate_from_outputs(
+        str(tmp_path), save="out.gif", writer="pillow"
+    )
+    assert fig is not None
+    plt.close(fig)
+
+
+def test_animate_from_outputs_with_show(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0, 1])
+    monkeypatch.setattr(
+        plots,
+        "load_global",
+        lambda d, s, var="u": np.ones((2, 2)) * s,
+    )
+    monkeypatch.setattr(plt, "show", lambda: None)
+    anim, fig, ax = plots.animate_from_outputs(
+        str(tmp_path), show=True, steps=[0, 1]
+    )
+    assert fig is not None
+    plt.close(fig)
+
+def test_add_overlays_rankgrid_no_boxes():
+    fig, ax = plt.subplots()
+    U = np.zeros((2, 2))
+    rank_layout = [(0, 0, 0, 2, 2)]
+    plots.add_overlays(ax, U, show_rankgrid=True, show_rankboxes=False, rank_layout=rank_layout)
+    plt.close(fig)
+
+
+def test__imshow_with_colorbar_with_vmin_vmax():
+    fig, ax = plt.subplots()
+    U = np.arange(4).reshape(2, 2)
+    im, cb = plots._imshow_with_colorbar(ax, U, "viridis", vmin=0, vmax=1)
+    assert cb.ax in fig.axes
+    plt.close(fig)
+
+
+def test_imshow_field_with_existing_ax_and_save(tmp_path):
+    fig, ax = plt.subplots()
+    U = np.ones((3, 3))
+    out = tmp_path / "field.png"
+    fig2, ax2 = plots.imshow_field(U, ax=ax, save=out)
+    assert out.exists()
+    assert ax2 is ax
+    plt.close(fig2)
+
+
+def test_compare_fields_no_diff(monkeypatch):
+    A = np.zeros((3, 3))
+    B = np.ones((3, 3))
+    monkeypatch.setattr(plt, "show", lambda: None)
+    fig, axes = plots.compare_fields(A, B, show_diff=False)
+    assert len(axes) == 2
+    plt.close(fig)
+
+
+def test_animate_from_outputs_steps_none(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0, 1])
+    monkeypatch.setattr(
+        plots, "load_global", lambda d, s, var="u": np.ones((2, 2)) * s
+    )
+    anim, fig, ax = plots.animate_from_outputs(str(tmp_path), steps=None)
+    assert fig is not None
+    plt.close(fig)
+
+
+def test_animate_from_outputs_writer_auto_ffmpeg(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0])
+    monkeypatch.setattr(
+        plots, "load_global", lambda d, s, var="u": np.zeros((2, 2))
+    )
+
+    class DummyAnim:
+        def save(self, *a, **k): return None
+
+    monkeypatch.setattr(plots, "FuncAnimation", lambda *a, **k: DummyAnim())
+    anim, fig, ax = plots.animate_from_outputs(str(tmp_path), save="video.mp4", writer=None)
+    assert fig is not None
+    plt.close(fig)
+
+
+def test_animate_from_outputs_writer_auto_pillow(monkeypatch, tmp_path):
+    monkeypatch.setattr(plots, "list_available_steps", lambda d: [0])
+    monkeypatch.setattr(
+        plots, "load_global", lambda d, s, var="u": np.zeros((2, 2))
+    )
+
+    class DummyAnim:
+        def save(self, *a, **k): return None
+
+    monkeypatch.setattr(plots, "FuncAnimation", lambda *a, **k: DummyAnim())
+    anim, fig, ax = plots.animate_from_outputs(str(tmp_path), save="anim.gif", writer=None)
+    assert fig is not None
     plt.close(fig)
