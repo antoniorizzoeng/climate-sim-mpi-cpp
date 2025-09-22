@@ -2,17 +2,6 @@
 
 int run_cmd(const std::string& cmd) { return std::system(cmd.c_str()); }
 
-std::vector<double> read_bin_plane(const fs::path& p, int nx, int ny) {
-    std::ifstream ifs(p, std::ios::binary);
-    if (!ifs.good())
-        throw std::runtime_error("Failed to open " + p.string());
-    std::vector<double> buf((size_t)nx * ny);
-    ifs.read(reinterpret_cast<char*>(buf.data()), (std::streamsize)buf.size() * sizeof(double));
-    if (!ifs)
-        throw std::runtime_error("Short read on " + p.string());
-    return buf;
-}
-
 std::vector<std::vector<double>> read_nc_2d(const fs::path& p, const char* var) {
     int ncid;
     if (nc_open(p.c_str(), NC_NOWRITE, &ncid) != NC_NOERR)

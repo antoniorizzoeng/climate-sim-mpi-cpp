@@ -36,8 +36,6 @@ struct RankTile {
 
 int run_cmd(const std::string& cmd);
 
-std::vector<double> read_bin_plane(const fs::path& p, int nx, int ny);
-
 std::vector<std::vector<double>> read_nc_2d(const fs::path& p, const char* var);
 
 std::vector<RankTile> read_rank_layout(const fs::path& csv);

@@ -142,8 +142,6 @@ SimConfig load_yaml_file(const std::string& path) {
             cfg.ic.yc_frac = ic["yc_frac"].as<double>();
         if (ic["path"])
             cfg.ic.path = ic["path"].as<std::string>();
-        if (ic["format"])
-            cfg.ic.format = ic["format"].as<std::string>();
         if (ic["var"])
             cfg.ic.var = ic["var"].as<std::string>();
     }
@@ -255,8 +253,6 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
             continue;
         if (try_set_str(a, "ic.path", o.ic.path, i))
             continue;
-        if (try_set_str(a, "ic.format", o.ic.format, i))
-            continue;
         if (try_set_str(a, "ic.var", o.ic.var, i))
             continue;
     }
@@ -307,8 +303,6 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
         base.ic.yc_frac = *o.ic.yc_frac;
     if (o.ic.path)
         base.ic.path = *o.ic.path;
-    if (o.ic.format)
-        base.ic.format = *o.ic.format;
 }
 
 SimConfig merged_config(const std::optional<std::string>& yaml_path,

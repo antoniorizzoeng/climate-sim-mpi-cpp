@@ -15,7 +15,6 @@ struct ICConfig {
     double xc_frac = 0.5;
     double yc_frac = 0.5;
     std::string path;
-    std::string format = "bin";
     std::string var;
 };
 

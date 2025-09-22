@@ -25,7 +25,7 @@ TEST(Integration_Main, BoundaryConditions_AndErrorHandling) {
                << " --D=0 --vx=0 --vy=0"
                << " --dt=0.1 --steps=1 --out_every=1"
                << " --bc=periodic"
-               << " --ic.mode=file --ic.format=bin --ic.path=inputs/does_not_exist.bin";
+               << " --ic.mode=file --ic.path=inputs/does_not_exist.nc";
     const int ret = run_cmd(cmd_bad_ic.str());
     EXPECT_NE(ret, 0);
 

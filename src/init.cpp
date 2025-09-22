@@ -32,31 +32,6 @@ static void ic_gaussian(const Decomp2D& dec, Field& u, const SimConfig& cfg) {
     }
 }
 
-static void ic_from_bin_global(const Decomp2D& dec, Field& u, const SimConfig& cfg) {
-    const int NX = cfg.nx, NY = cfg.ny;
-    std::ifstream ifs(cfg.ic.path, std::ios::binary);
-    if (!ifs)
-        throw std::runtime_error("IC file open failed: " + cfg.ic.path);
-
-    const int h = u.halo;
-    const int nx = u.nx_local;
-    const int ny = u.ny_local;
-
-    for (int j = 0; j < ny; ++j) {
-        const int gj = dec.y_offset + j;
-        const std::streamoff row_off = static_cast<std::streamoff>(gj) * NX * sizeof(double);
-        const std::streamoff col_off = static_cast<std::streamoff>(dec.x_offset) * sizeof(double);
-        ifs.seekg(row_off + col_off, std::ios::beg);
-        for (int i = 0; i < nx; ++i) {
-            double val{};
-            ifs.read(reinterpret_cast<char*>(&val), sizeof(double));
-            u.at(h + i, h + j) = val;
-        }
-        if (!ifs)
-            throw std::runtime_error("IC file read failed at row " + std::to_string(gj));
-    }
-}
-
 void apply_initial_condition(const Decomp2D& dec, Field& u, const SimConfig& cfg) {
     if (cfg.ic.mode == "preset") {
         if (cfg.ic.preset == "gaussian_hotspot") {
@@ -67,16 +42,10 @@ void apply_initial_condition(const Decomp2D& dec, Field& u, const SimConfig& cfg
             throw std::runtime_error("Unknown IC preset: " + cfg.ic.preset);
         }
     } else if (cfg.ic.mode == "file") {
-        if (cfg.ic.format == "bin") {
-            ic_from_bin_global(dec, u, cfg);
-        } else if (cfg.ic.format == "netcdf" || cfg.ic.format == "nc") {
-            const std::string varname = cfg.ic.var.empty() ? "T" : cfg.ic.var;
-            if (!ic_from_netcdf_global(dec, u, cfg.ic.path, varname)) {
-                throw std::runtime_error("Failed to read NetCDF variable '" + varname +
-                                         "' from file: " + cfg.ic.path);
-            }
-        } else {
-            throw std::runtime_error("Unsupported IC format: " + cfg.ic.format);
+        const std::string varname = cfg.ic.var.empty() ? "T" : cfg.ic.var;
+        if (!ic_from_netcdf_global(dec, u, cfg.ic.path, varname)) {
+            throw std::runtime_error("Failed to read NetCDF variable '" + varname +
+                                     "' from file: " + cfg.ic.path);
         }
     }
 }
