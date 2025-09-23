@@ -94,7 +94,6 @@ TEST(Unit_Init, NetCDFIC_SucceedsAndMissingVarThrows) {
 
     SimConfig cfg{};
     cfg.ic.mode = "file";
-    cfg.ic.format = "netcdf";
     cfg.ic.path = nc_ok;
     cfg.ic.var = var;
 
@@ -118,30 +117,12 @@ TEST(Unit_Init_IC, NetCDFNotBuiltThrows) {
     cfg.steps = 1;
     cfg.out_every = 1;
     cfg.ic.mode = "file";
-    cfg.ic.format = "netcdf";
     cfg.ic.path = "dummy.nc";
 
     EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
 }
 
-TEST(Unit_Init_IC, UnsupportedFormatThrows) {
-    auto dec = make_decomp(4, 4, 4, 4);
-    Field u(4, 4, 1, 1.0, 1.0);
-
-    SimConfig cfg{};
-    cfg.nx = cfg.ny = 4;
-    cfg.dx = cfg.dy = 1;
-    cfg.dt = 1;
-    cfg.steps = 1;
-    cfg.out_every = 1;
-    cfg.ic.mode = "file";
-    cfg.ic.format = "foobar";
-    cfg.ic.path = "nonexistent";
-
-    EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
-}
-
-TEST(Unit_Init_IC, BinaryFileMissingThrows) {
+TEST(Unit_Init_IC, FileMissingThrows) {
     auto dec = make_decomp(2, 2, 2, 2);
     Field u(2, 2, 1, 1.0, 1.0);
 
@@ -152,34 +133,7 @@ TEST(Unit_Init_IC, BinaryFileMissingThrows) {
     cfg.steps = 1;
     cfg.out_every = 1;
     cfg.ic.mode = "file";
-    cfg.ic.format = "bin";
-    cfg.ic.path = "definitely_missing.bin";
+    cfg.ic.path = "definitely_missing.nc";
 
     EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
-}
-
-TEST(Unit_Init_IC, BinaryFileTruncatedThrows) {
-    auto dec = make_decomp(2, 2, 2, 2);
-    Field u(2, 2, 1, 1.0, 1.0);
-
-    const std::string fname = "truncated.bin";
-    {
-        std::ofstream ofs(fname, std::ios::binary);
-        double val = 1.23;
-        ofs.write(reinterpret_cast<char*>(&val), sizeof(double));
-    }
-
-    SimConfig cfg{};
-    cfg.nx = cfg.ny = 2;
-    cfg.dx = cfg.dy = 1;
-    cfg.dt = 1;
-    cfg.steps = 1;
-    cfg.out_every = 1;
-    cfg.ic.mode = "file";
-    cfg.ic.format = "bin";
-    cfg.ic.path = fname;
-
-    EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
-
-    std::remove(fname.c_str());
 }

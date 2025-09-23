@@ -197,7 +197,7 @@ def cmd_interactive(args):
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="climate-vis",
-        description="Quick CLI for visualizing climate_sim outputs (CSV/NetCDF).",
+        description="Quick CLI for visualizing climate_sim outputs.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

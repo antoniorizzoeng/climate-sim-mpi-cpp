@@ -6,7 +6,7 @@ output:   { prefix: "dev" }
 
 ic:
   preset: gaussian_hotspot
-  file:   "inputs/ic_global_double.bin"
+  file:   "inputs/ic_global.nc"
   params:
     A: 1.0
     sigma_frac: 0.05

@@ -13,7 +13,7 @@ nav_order: 2
 - `include/diffusion.hpp` — 5-point stencil (explicit) diffusion.
 - `include/advection.hpp` — 1st-order upwind advection (constant vx, vy).
 - `include/boundary.hpp` — physical boundary conditions.
-- `include/io.hpp` — snapshots (CSV initially), reductions for stats, timing/logs.
+- `include/io.hpp` — snapshots, reductions for stats, timing/logs.
 
 > **Single Source of Truth**: Public interfaces live in `include/*.hpp`. This document is descriptive only. See headers for authoritative signatures.
 
@@ -46,5 +46,5 @@ Example flags:
 - Prebuild MPI datatypes for halos (if not handled internally).
 
 ## Output
-- Per-rank CSV/NetCDF tiles: `snap_<step>_r<rank>.csv` (simple and parallel).
+- Per-rank NetCDF tiles: `snap_<step>_r<rank>.nc` (simple and parallel).
 - Global stats: min/max/mean via reductions every `out_every` steps.

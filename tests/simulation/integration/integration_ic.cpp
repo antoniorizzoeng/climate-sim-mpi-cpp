@@ -2,18 +2,21 @@
 
 #include "integration_helpers.hpp"
 
-TEST(Integration, BinaryIC_LoadsCorrectMinMax) {
+TEST(Integration, IC_LoadsCorrectMinMax) {
     fs::remove_all("inputs");
     fs::create_directories("inputs");
     std::ostringstream py;
     py << PYTHON_EXECUTABLE << " " << (fs::path(SCRIPTS_DIR) / "generate_ic.py").string()
-       << " --nx 64 --ny 32 --amp 1.0 --sigma-frac 0.1 --fmt bin --out inputs/ic_global";
+       << " --nx 64 --ny 32 --amp 1.0 --sigma-frac 0.1 --out inputs/ic_global --var T";
     ASSERT_EQ(run_cmd(py.str()), 0);
 
-    auto plane = read_bin_plane("inputs/ic_global.bin", 64, 32);
-    ASSERT_EQ(plane.size(), 64u * 32u);
+    auto plane = read_nc_2d("inputs/ic_global.nc", "T");
+    ASSERT_EQ(plane.size(), 32u);
+    ASSERT_EQ(plane[0].size(), 64u);
+
     double mx = -1e300;
-    for (double v : plane) mx = std::max(mx, v);
+    for (const auto& row : plane)
+        for (double v : row) mx = std::max(mx, v);
     ASSERT_GT(mx, 1e-6);
 
     fs::remove_all("outputs");
@@ -23,7 +26,7 @@ TEST(Integration, BinaryIC_LoadsCorrectMinMax) {
         << " --D=0 --vx=0 --vy=0"
         << " --dt=0.1 --steps=1 --out_every=1"
         << " --bc=periodic"
-        << " --ic.mode=file --ic.format=bin --ic.path=inputs/ic_global.bin";
+        << " --ic.mode=file --ic.path=inputs/ic_global.nc";
     ASSERT_EQ(run_cmd(cmd.str()), 0);
 
     auto full = assemble_global_nc_snapshot_from("outputs/snapshots", 0, "u");

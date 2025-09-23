@@ -23,8 +23,7 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - Initial conditions:
   - Constant zero
   - Gaussian hotspot
-  - Binary / NetCDF input
-- Output format: NetCDF
+  - NetCDF i/o
 - Configurable via YAML and CLI overrides.
 - Timing statistics logged at end of run.
 
