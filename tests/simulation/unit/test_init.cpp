@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
-#include <netcdf.h>
+#include <mpi.h>
+#include <pnetcdf.h>
 
 #include <fstream>
 
@@ -69,57 +70,6 @@ TEST(Unit_Init_IC, GaussianHotspotPreset) {
                 has_nonzero = true;
 
     EXPECT_TRUE(has_nonzero);
-}
-
-TEST(Unit_Init, NetCDFIC_SucceedsAndMissingVarThrows) {
-    auto dec = make_decomp(8, 6, 8, 6);
-    Field u(dec.nx_local, dec.ny_local, 1, 1.0, 1.0);
-
-    const std::string nc_ok = "tmp_ic_ok.nc";
-    const std::string var = "u";
-
-    {
-        int ncid, dimy, dimx, varid;
-        ASSERT_EQ(nc_create(nc_ok.c_str(), NC_CLOBBER, &ncid), NC_NOERR);
-        ASSERT_EQ(nc_def_dim(ncid, "y", dec.ny_global, &dimy), NC_NOERR);
-        ASSERT_EQ(nc_def_dim(ncid, "x", dec.nx_global, &dimx), NC_NOERR);
-        int dims[2] = {dimy, dimx};
-        ASSERT_EQ(nc_def_var(ncid, var.c_str(), NC_DOUBLE, 2, dims, &varid), NC_NOERR);
-        ASSERT_EQ(nc_enddef(ncid), NC_NOERR);
-
-        std::vector<double> data(dec.nx_global * dec.ny_global, 0.25);
-        ASSERT_EQ(nc_put_var_double(ncid, varid, data.data()), NC_NOERR);
-        ASSERT_EQ(nc_close(ncid), NC_NOERR);
-    }
-
-    SimConfig cfg{};
-    cfg.ic.mode = "file";
-    cfg.ic.path = nc_ok;
-    cfg.ic.var = var;
-
-    apply_initial_condition(dec, u, cfg);
-    EXPECT_NEAR(u.at(1, 1), 0.25, 1e-12);
-
-    cfg.ic.var = "does_not_exist";
-    EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
-
-    remove(nc_ok.c_str());
-}
-
-TEST(Unit_Init_IC, NetCDFNotBuiltThrows) {
-    auto dec = make_decomp(2, 2, 2, 2);
-    Field u(2, 2, 1, 1.0, 1.0);
-
-    SimConfig cfg{};
-    cfg.nx = cfg.ny = 2;
-    cfg.dx = cfg.dy = 1;
-    cfg.dt = 1;
-    cfg.steps = 1;
-    cfg.out_every = 1;
-    cfg.ic.mode = "file";
-    cfg.ic.path = "dummy.nc";
-
-    EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
 }
 
 TEST(Unit_Init_IC, FileMissingThrows) {

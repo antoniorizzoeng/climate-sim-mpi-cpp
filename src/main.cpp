@@ -75,39 +75,24 @@ int main(int argc, char** argv) {
 
     if (world_rank == 0) {
         fs::create_directories("outputs");
-        {
-            std::ofstream ofs("outputs/rank_layout.csv", std::ios::app);
-            if (!ofs)
-                throw std::runtime_error("Failed to open outputs/rank_layout.csv");
-            if (ofs.tellp() == 0) {
-                ofs << "rank,x_offset,y_offset,nx_local,ny_local,halo,nx_global,ny_global\n";
-            }
-        }
-        fs::create_directories("outputs/snapshots");
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
-    write_rank_layout_csv("outputs/rank_layout.csv",
-                          world_rank,
-                          cfg.nx,
-                          cfg.ny,
-                          dec.x_offset,
-                          dec.y_offset,
-                          dec.nx_local,
-                          dec.ny_local,
-                          halo);
-
-    MPI_Barrier(MPI_COMM_WORLD);
+    int ncid, varid;
+    if (world_rank == 0)
+        std::cout << "Opening NetCDF file for parallel output\n";
+    open_netcdf_parallel("outputs/snapshots.nc", dec, MPI_COMM_WORLD, ncid, varid);
 
     double t0 = MPI_Wtime();
     double sum_step = 0.0, max_step = 0.0, min_step = 1e300;
 
+    int time_index = 0;
     for (int n = 0; n < cfg.steps; ++n) {
         double ts = MPI_Wtime();
 
         if (n % cfg.out_every == 0 || n == 0) {
-            auto fname = snapshot_filename_nc("outputs/snapshots", n, world_rank);
-            write_field_netcdf(u, fname, dec);
+            write_field_netcdf(ncid, varid, u, dec, time_index);
+            time_index++;
         }
 
         exchange_halos(u, dec, MPI_COMM_WORLD);
@@ -128,6 +113,8 @@ int main(int argc, char** argv) {
         if (dt < min_step)
             min_step = dt;
     }
+
+    close_netcdf_parallel(ncid);
 
     double t1 = MPI_Wtime();
     double total = t1 - t0;

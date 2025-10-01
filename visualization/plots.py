@@ -1,53 +1,27 @@
 from typing import Optional, Sequence, Tuple
-
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from .io import load_global, list_available_steps
 
-def add_overlays(ax, U,
-                 show_minmax=False,
-                 show_rankgrid=False,
-                 show_rankboxes=False,
-                 rank_layout=None):
-    if show_minmax:
-        umin, umax = float(np.nanmin(U)), float(np.nanmax(U))
-        ax.text(0.99, 0.99, f"min={umin:.2f}\nmax={umax:.2f}",
-                transform=ax.transAxes, ha="right", va="top",
-                fontsize=8, color="white",
-                bbox=dict(facecolor="black", alpha=0.5, edgecolor="none"))
 
-    if (show_rankgrid or show_rankboxes) and rank_layout is not None:
-        for (rank, x0, y0, nx, ny) in rank_layout:
-            cx, cy = x0 + nx / 2, y0 + ny / 2
-            if show_rankgrid:
-                ax.text(cx, cy, str(rank), color="red",
-                        ha="center", va="center", fontsize=8,
-                        bbox=dict(facecolor="white", alpha=0.3, edgecolor="none"))
-            if show_rankboxes:
-                rect = patches.Rectangle(
-                    (x0, y0), nx, ny,
-                    linewidth=0.8,
-                    edgecolor="black",
-                    facecolor="none",
-                    alpha=0.6,
-                )
-                ax.add_patch(rect)
-
-
-def _imshow_with_colorbar(ax, U, cmap, vmin, vmax):
+def _imshow(ax: plt.Axes, U: np.ndarray, cmap: str, vmin: Optional[float], vmax: Optional[float]):
     im = ax.imshow(U, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
     ax.set_aspect("equal")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
+    return im
 
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    cb = ax.figure.colorbar(im, cax=cax)
-    return im, cb
+
+def _overlay_minmax(ax: plt.Axes, U: np.ndarray) -> None:
+    umin, umax = float(np.nanmin(U)), float(np.nanmax(U))
+    ax.text(
+        0.99, 0.99, f"min={umin:.2f}\nmax={umax:.2f}",
+        transform=ax.transAxes, ha="right", va="top",
+        fontsize=8, color="white",
+        bbox=dict(facecolor="black", alpha=0.5, edgecolor="none")
+    )
 
 
 def imshow_field(
@@ -60,24 +34,19 @@ def imshow_field(
     show: bool = False,
     save: Optional[str] = None,
     overlay_minmax: bool = False,
-    overlay_rankgrid: bool = False,
-    overlay_rankboxes: bool = False,
-    rank_layout=None,
 ):
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 6))
     else:
         fig = ax.figure
 
-    _imshow_with_colorbar(ax, U, cmap, vmin, vmax)
+    _imshow(ax, U, cmap, vmin, vmax)
+
     if title:
         ax.set_title(title)
 
-    add_overlays(ax, U,
-                 show_minmax=overlay_minmax,
-                 show_rankgrid=overlay_rankgrid,
-                 show_rankboxes=overlay_rankboxes,
-                 rank_layout=rank_layout)
+    if overlay_minmax:
+        _overlay_minmax(ax, U)
 
     if save:
         fig.savefig(save, dpi=150, bbox_inches="tight")
@@ -100,7 +69,6 @@ def compare_fields(
     show: bool = False,
     save: Optional[str] = None,
     overlay_minmax: bool = False,
-    overlay_rankboxes: bool = False,
 ):
     assert A.shape == B.shape, "Fields must have the same shape"
 
@@ -116,23 +84,22 @@ def compare_fields(
     else:
         axA, axB, axD = axes
 
-    _imshow_with_colorbar(axA, A, cmap, vmin, vmax)
+    _imshow(axA, A, cmap, vmin, vmax)
     axA.set_title(titles[0])
-    add_overlays(axA, A, show_minmax=overlay_minmax,
-                 show_rankboxes=overlay_rankboxes)
+    if overlay_minmax:
+        _overlay_minmax(axA, A)
 
-    _imshow_with_colorbar(axB, B, cmap, vmin, vmax)
+    _imshow(axB, B, cmap, vmin, vmax)
     axB.set_title(titles[1])
-    add_overlays(axB, B, show_minmax=overlay_minmax,
-                 show_rankboxes=overlay_rankboxes)
+    if overlay_minmax:
+        _overlay_minmax(axB, B)
 
     if show_diff:
         D = B - A
         if diff_vlim is None:
             m = np.nanmax(np.abs(D))
             diff_vlim = 1e-16 if m == 0 else m
-        _imshow_with_colorbar(axD, D, diff_cmap,
-                                       -diff_vlim, diff_vlim)
+        _imshow(axD, D, diff_cmap, -diff_vlim, diff_vlim)
         axD.set_title("B - A")
 
     if save:
@@ -158,73 +125,58 @@ def animate_from_outputs(
     title_prefix: str = "timestep",
     show: bool = False,
     overlay_minmax: bool = False,
-    overlay_rankgrid: bool = False,
-    overlay_rankboxes: bool = False,
-    rank_layout=None,
 ):
     if steps is None:
         steps = list_available_steps(base_outputs_dir)
     if not steps:
-        raise RuntimeError(
-            f"No steps found in {base_outputs_dir}/snapshots"
-        )
+        raise RuntimeError(f"No steps found in {base_outputs_dir}")
 
-    U0 = load_global(base_outputs_dir, steps[0], var=var)
-    if vmin is None or vmax is None:
-        vals = [U0.min(), U0.max()]
-        U_last = load_global(base_outputs_dir, steps[-1], var=var)
-        vals += [U_last.min(), U_last.max()]
-        vmin = min(vals) if vmin is None else vmin
-        vmax = max(vals) if vmax is None else vmax
+    first = load_global(base_outputs_dir, steps[0], var=var)
+    last = load_global(base_outputs_dir, steps[-1], var=var)
+    if vmin is None:
+        vmin = min(first.min(), last.min())
+    if vmax is None:
+        vmax = max(first.max(), last.max())
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    im, _ = _imshow_with_colorbar(ax, U0, cmap, vmin, vmax)
+    im = _imshow(ax, first, cmap, vmin, vmax)
     ttl = ax.set_title(f"{title_prefix}: {steps[0]}")
 
-    add_overlays(ax, U0,
-                 show_minmax=overlay_minmax,
-                 show_rankgrid=overlay_rankgrid,
-                 show_rankboxes=overlay_rankboxes,
-                 rank_layout=rank_layout)
+    text_overlay = None
+    if overlay_minmax:
+        umin, umax = float(np.nanmin(first)), float(np.nanmax(first))
+        text_overlay = ax.text(
+            0.99, 0.99, f"min={umin:.2f}\nmax={umax:.2f}",
+            transform=ax.transAxes, ha="right", va="top",
+            fontsize=8, color="white",
+            bbox=dict(facecolor="black", alpha=0.5, edgecolor="none")
+        )
 
     def _update(frame_idx: int):
         step = steps[frame_idx]
         U = load_global(base_outputs_dir, step, var=var)
         im.set_data(U)
         ttl.set_text(f"{title_prefix}: {step}")
-        add_overlays(ax, U,
-                     show_minmax=overlay_minmax,
-                     show_rankgrid=overlay_rankgrid,
-                     show_rankboxes=overlay_rankboxes,
-                     rank_layout=rank_layout)
-        return (im, ttl)
+        if overlay_minmax and text_overlay is not None:
+            umin, umax = float(np.nanmin(U)), float(np.nanmax(U))
+            text_overlay.set_text(f"min={umin:.2f}\nmax={umax:.2f}")
+        return [im] + ([text_overlay] if text_overlay else [])
 
-    anim = FuncAnimation(
-        fig,
-        _update,
-        frames=len(steps),
-        interval=interval_ms,
-        blit=False,
-        repeat=repeat,
-    )
+    anim = FuncAnimation(fig, _update, frames=len(steps),
+                         interval=interval_ms, blit=False, repeat=repeat)
 
     if save:
         if writer is None:
             writer = "ffmpeg" if save.lower().endswith(".mp4") else "pillow"
         if writer == "ffmpeg":
-            try:
-                anim.save(save, writer=FFMpegWriter(fps=fps, bitrate=-1))
-            except Exception as e:
-                raise RuntimeError(
-                    "Failed to save with FFMpegWriter. Ensure ffmpeg is installed "
-                    "or choose writer='pillow' and a .gif filename."
-                ) from e
-        elif writer == "pillow":
-            anim.save(save, writer=PillowWriter(fps=fps))
+            anim.save(save, writer=FFMpegWriter(fps=fps, bitrate=-1))
         else:
-            raise ValueError("writer must be 'ffmpeg' or 'pillow'")
+            anim.save(save, writer=PillowWriter(fps=fps))
 
     if show:
         plt.show()
 
     return anim, fig, ax
+
+
+

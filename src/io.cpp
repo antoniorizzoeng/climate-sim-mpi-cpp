@@ -1,6 +1,7 @@
 #include "io.hpp"
 
-#include <netcdf.h>
+#include <mpi.h>
+#include <pnetcdf.h>
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
@@ -15,6 +16,16 @@
 #include "boundary.hpp"
 #include "field.hpp"
 namespace fs = std::filesystem;
+
+namespace {
+inline void ncmpi_check(int status, const char* where) {
+    if (status != NC_NOERR) {
+        std::ostringstream oss;
+        oss << where << ": " << ncmpi_strerror(status);
+        throw std::runtime_error(oss.str());
+    }
+}
+}  // namespace
 
 static std::string lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -320,89 +331,47 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
     return cfg;
 }
 
-void write_rank_layout_csv(const std::string& path,
-                           int rank,
-                           int nx_global,
-                           int ny_global,
-                           int x_offset,
-                           int y_offset,
-                           int nx_local,
-                           int ny_local,
-                           int halo) {
-    const bool exists = fs::exists(path);
-    fs::path p(path);
-    if (!p.parent_path().empty())
-        fs::create_directories(p.parent_path());
-    std::ofstream ofs(path, std::ios::app);
-    if (!ofs)
-        throw std::runtime_error("Failed to open rank layout file: " + path);
-    if (!exists) {
-        ofs << "rank,x_offset,y_offset,nx_local,ny_local,halo,nx_global,ny_global\n";
-    }
-    ofs << rank << "," << x_offset << "," << y_offset << "," << nx_local << "," << ny_local << ","
-        << halo << "," << nx_global << "," << ny_global << "\n";
+int open_netcdf_parallel(
+    const std::string& filename, const Decomp2D& dec, MPI_Comm comm, int& ncid, int& varid) {
+    int dim_time, dim_y, dim_x;
+    int status =
+        ncmpi_create(comm, filename.c_str(), NC_CLOBBER | NC_64BIT_DATA, MPI_INFO_NULL, &ncid);
+    ncmpi_check(status, "ncmpi_create");
+
+    ncmpi_check(ncmpi_def_dim(ncid, "time", NC_UNLIMITED, &dim_time), "def_dim time");
+    ncmpi_check(ncmpi_def_dim(ncid, "y", dec.ny_global, &dim_y), "def_dim y");
+    ncmpi_check(ncmpi_def_dim(ncid, "x", dec.nx_global, &dim_x), "def_dim x");
+
+    int dims[3] = {dim_time, dim_y, dim_x};
+    ncmpi_check(ncmpi_def_var(ncid, "u", NC_DOUBLE, 3, dims, &varid), "def_var u");
+
+    ncmpi_check(ncmpi_enddef(ncid), "enddef");
+    return NC_NOERR;
 }
 
-static inline void nc_throw_if(int status, const char* where) {
-    if (status != NC_NOERR) {
-        std::ostringstream oss;
-        oss << where << ": " << nc_strerror(status);
-        throw std::runtime_error(oss.str());
-    }
-}
+bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step) {
+    // hyperslab: [time, y, x]
+    MPI_Offset start[3], count[3];
+    start[0] = step;
+    start[1] = dec.y_offset;
+    start[2] = dec.x_offset;
+    count[0] = 1;
+    count[1] = dec.ny_local;
+    count[2] = dec.nx_local;
 
-std::string snapshot_filename_nc(const std::string& outdir, int step, int rank) {
-    fs::create_directories(outdir);
-    char buf[256];
-    std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.nc", step, rank);
-    return (fs::path(outdir) / buf).string();
-}
-
-bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D& /*dec*/) {
-    int ncid;
-    int status = nc_create(filename.c_str(), NC_NETCDF4 | NC_CLOBBER, &ncid);
-    if (status != NC_NOERR)
-        return false;
-
-    size_t ny = static_cast<size_t>(f.ny_total());
-    size_t nx = static_cast<size_t>(f.nx_total());
-
-    int dim_y, dim_x;
-    if (nc_def_dim(ncid, "y", ny, &dim_y) != NC_NOERR) {
-        nc_close(ncid);
-        return false;
-    }
-    if (nc_def_dim(ncid, "x", nx, &dim_x) != NC_NOERR) {
-        nc_close(ncid);
-        return false;
-    }
-
-    int dims[2] = {dim_y, dim_x};
-    int varid;
-    if (nc_def_var(ncid, "u", NC_DOUBLE, 2, dims, &varid) != NC_NOERR) {
-        nc_close(ncid);
-        return false;
-    }
-
-    nc_put_att_text(ncid, varid, "long_name", 1, "u");
-
-    if (nc_enddef(ncid) != NC_NOERR) {
-        nc_close(ncid);
-        return false;
-    }
-
-    std::vector<double> flat(nx * ny);
-    for (size_t j = 0; j < ny; ++j) {
-        for (size_t i = 0; i < nx; ++i) {
-            flat[j * nx + i] = f.at(static_cast<int>(i), static_cast<int>(j));
+    std::vector<double> buf((size_t)dec.nx_local * dec.ny_local);
+    for (int j = 0; j < dec.ny_local; ++j) {
+        for (int i = 0; i < dec.nx_local; ++i) {
+            buf[(size_t)j * dec.nx_local + i] = f.at(i + f.halo, j + f.halo);
         }
     }
 
-    if (nc_put_var_double(ncid, varid, flat.data()) != NC_NOERR) {
-        nc_close(ncid);
+    int status = ncmpi_put_vara_double_all(ncid, varid, start, count, buf.data());
+    if (status != NC_NOERR) {
+        std::cerr << "Rank write failed: " << ncmpi_strerror(status) << "\n";
         return false;
     }
-
-    nc_close(ncid);
     return true;
 }
+
+void close_netcdf_parallel(int ncid) { ncmpi_close(ncid); }

@@ -1,160 +1,86 @@
-import os
-import numpy as np
 import pytest
+import numpy as np
 import netCDF4
 
-from visualization.io import (
-    RankTile,
-    assemble_global_netcdf,
-    _read_rank_layout,
-    _snapshots_dir,
-    _list_snapshot_files,
-    _read_nc_tile,
-    _place_tile
-)
+from visualization.io import _snapshots_dir, list_available_steps, load_global
 
-from tests.visualization.sample_data import (
-    make_tiles_nx_ny,
-    write_rank_layout,
-)
-
-def test_assemble_global_netcdf_roundtrip(tmp_outputs_dir):
-    nxg, nyg = 8, 6
-    tiles = make_tiles_nx_ny(nxg, nyg, halo=1)
-    write_rank_layout(tmp_outputs_dir, tiles)
-
-    snapdir = os.path.join(tmp_outputs_dir, "snapshots")
-    os.makedirs(snapdir, exist_ok=True)
-    step = 0
-
-    def core_fn(t):
-        ny, nx = t["ny"], t["nx"]
-        y0, x0 = t["y_off"], t["x_off"]
-        yy = np.arange(y0, y0 + ny)[:, None]
-        xx = np.arange(x0, x0 + nx)[None, :]
-        return (yy + xx / 100.0).astype(float)
-
-    for t in tiles:
-        ny = t["ny"] + 2 * t["halo"]
-        nx = t["nx"] + 2 * t["halo"]
-        tile = np.zeros((ny, nx), dtype=float)
-        core = core_fn(t)
-        tile[t["halo"]:t["halo"] + t["ny"], t["halo"]:t["halo"] + t["nx"]] = core
-
-        path = os.path.join(snapdir, f"snapshot_{step:05d}_rank{t['rank']:05d}.nc")
-        with netCDF4.Dataset(path, "w") as ds:
-            ds.createDimension("y", ny)
-            ds.createDimension("x", nx)
-            v = ds.createVariable("u", "f8", ("y", "x"))
-            v[:, :] = tile
-
-    U = assemble_global_netcdf(tmp_outputs_dir, step=0, var="u")
-    assert U.shape == (nyg, nxg)
-    assert np.isclose(U[0, 0], 0.0)
-    assert np.isclose(U[-1, -1], (nyg - 1) + (nxg - 1) / 100.0)
-
-def test_read_rank_layout_errors(tmp_path):
-    path = tmp_path / "rank_layout.csv"
+def test_snapshots_dir_missing(tmp_path):
+    missing_dir = tmp_path / "nonexistent"
     with pytest.raises(FileNotFoundError):
-        _read_rank_layout(str(path))
+        _snapshots_dir(str(missing_dir))
 
-    path.write_text("")
-    with pytest.raises(RuntimeError):
-        _read_rank_layout(str(path))
-
-    path.write_text("rank,x_offset,y_offset,nx,ny,halo,nx_global,ny_global\n")
-    with pytest.raises(Exception):
-        _read_rank_layout(str(path))
+def test_snapshots_dir_exists(tmp_path):
+    path = _snapshots_dir(str(tmp_path))
+    assert path == str(tmp_path)
 
 
-def test_snapshots_dir_and_list_snapshot_files(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        _snapshots_dir(str(tmp_path))
+def test_list_available_steps_empty(tmp_path):
+    steps = list_available_steps(str(tmp_path))
+    assert steps == []
 
-    snapdir = tmp_path / "snapshots"
-    snapdir.mkdir()
-    with pytest.raises(FileNotFoundError):
-        _list_snapshot_files(str(snapdir), 0, "csv")
-    fname = snapdir / "snapshot_00000_rank00000.csv"
-    fname.write_text("1,2\n3,4\n")
-    out = _list_snapshot_files(str(snapdir), 0, "csv")
-    assert str(fname) in out
-
-def test_assemble_global_netcdf_missing_tile(tmp_outputs_dir):
-    tiles = make_tiles_nx_ny(4, 4, halo=0)
-    write_rank_layout(tmp_outputs_dir, tiles)
-    snapdir = os.path.join(tmp_outputs_dir, "snapshots")
-    os.makedirs(snapdir, exist_ok=True)
-    t = tiles[0]
-    path = os.path.join(snapdir, f"snapshot_00000_rank{t['rank']:05d}.nc")
-    with netCDF4.Dataset(path, "w") as ds:
-        ds.createDimension("y", t["ny"])
-        ds.createDimension("x", t["nx"])
-        v = ds.createVariable("u", "f8", ("y", "x"))
-        v[:, :] = np.zeros((t["ny"], t["nx"]))
-    with pytest.raises(FileNotFoundError):
-        assemble_global_netcdf(tmp_outputs_dir, step=0, var="u")
-        
-def test_read_nc_tile_var_missing_and_not2d(tmp_path):
-    path = tmp_path / "bad.nc"
-    with netCDF4.Dataset(path, "w") as ds:
-        ds.createDimension("y", 4)
-        ds.createDimension("x", 4)
-        ds.createVariable("v", "f8", ("y", "x"))
-    from visualization import io
-    with pytest.raises(RuntimeError):
-        io._read_nc_tile(str(path), "u")
-
-    path2 = tmp_path / "bad2.nc"
-    with netCDF4.Dataset(path2, "w") as ds:
-        ds.createDimension("z", 2)
-        ds.createVariable("u", "f8", ("z",))
-    with pytest.raises(RuntimeError):
-        io._read_nc_tile(str(path2), "u")
-
-def test_read_rank_layout_inconsistent(tmp_path):
-    path = tmp_path / "rank_layout.csv"
-    path.write_text(
-        "rank,x_offset,y_offset,nx,ny,halo,nx_global,ny_global\n"
-        "0,0,0,2,2,0,4,4\n"
-        "1,2,0,2,2,0,8,4\n"
-    )
-    with pytest.raises(RuntimeError):
-        _read_rank_layout(str(path))
-
-
-def test_list_snapshot_files_no_matches(tmp_path):
-    snapdir = tmp_path / "snapshots"
-    snapdir.mkdir()
-    with pytest.raises(FileNotFoundError):
-        _list_snapshot_files(str(snapdir), step=0, ext="nc")
-
-
-def test_read_nc_tile_not2d(tmp_path):
-    path = tmp_path / "bad.nc"
-    with netCDF4.Dataset(path, "w") as ds:
+def test_list_available_steps_missing_time_dim(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    with netCDF4.Dataset(nc_path, "w") as ds:
         ds.createDimension("y", 2)
         ds.createDimension("x", 2)
-        v = ds.createVariable("u", "f8", ("y", "x"))
-        v[:, :] = np.zeros((2, 2))
-    arr = _read_nc_tile(str(path), "u")
-    assert arr.shape == (2, 2)
+        ds.createVariable("u", "f8", ("y", "x"))
+    with pytest.raises(RuntimeError):
+        list_available_steps(str(tmp_path))
 
-    # now 3D var
-    path2 = tmp_path / "bad2.nc"
-    with netCDF4.Dataset(path2, "w") as ds:
-        ds.createDimension("z", 2)
+def test_list_available_steps_returns_steps(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    with netCDF4.Dataset(nc_path, "w") as ds:
+        ds.createDimension("time", 3)
         ds.createDimension("y", 2)
         ds.createDimension("x", 2)
-        ds.createVariable("u", "f8", ("z", "y", "x"))
+        ds.createVariable("u", "f8", ("time", "y", "x"))
+    steps = list_available_steps(str(tmp_path))
+    assert steps == [0, 1, 2]
+
+
+def test_load_global_no_nc_files(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_global(str(tmp_path), 0, var="u")
+
+def test_load_global_var_missing(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    with netCDF4.Dataset(nc_path, "w") as ds:
+        ds.createDimension("time", 2)
+        ds.createDimension("y", 2)
+        ds.createDimension("x", 2)
+        ds.createVariable("v", "f8", ("time", "y", "x"))
+    with pytest.raises(KeyError):
+        load_global(str(tmp_path), 0, var="u")
+
+def test_load_global_no_time_dim(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    with netCDF4.Dataset(nc_path, "w") as ds:
+        ds.createDimension("y", 2)
+        ds.createDimension("x", 2)
+        ds.createVariable("u", "f8", ("y", "x"))
     with pytest.raises(RuntimeError):
-        _read_nc_tile(str(path2), "u")
+        load_global(str(tmp_path), 0, var="u")
 
+def test_load_global_step_out_of_range(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    with netCDF4.Dataset(nc_path, "w") as ds:
+        ds.createDimension("time", 2)
+        ds.createDimension("y", 2)
+        ds.createDimension("x", 2)
+        ds.createVariable("u", "f8", ("time", "y", "x"))
+    with pytest.raises(IndexError):
+        load_global(str(tmp_path), 5, var="u")
 
-def test_place_tile_shape_mismatch():
-    U = np.zeros((4, 4))
-    t = RankTile(rank=0, x_off=0, y_off=0, nx=2, ny=2, halo=1, nxg=4, nyg=4)
-    bad_tile = np.zeros((5, 5))
-    with pytest.raises(RuntimeError):
-        _place_tile(U, bad_tile, t)
-
+def test_load_global_returns_correct_array(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    arr = np.arange(4).reshape((1, 2, 2))
+    with netCDF4.Dataset(nc_path, "w") as ds:
+        ds.createDimension("time", 1)
+        ds.createDimension("y", 2)
+        ds.createDimension("x", 2)
+        v = ds.createVariable("u", "f8", ("time", "y", "x"))
+        v[0, :, :] = arr[0]
+    out = load_global(str(tmp_path), 0, var="u")
+    assert isinstance(out, np.ndarray)
+    assert out.shape == (2, 2)
+    assert np.array_equal(out, arr[0])

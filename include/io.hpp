@@ -67,16 +67,9 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
 BCType bc_from_string(const std::string& s);
 std::string bc_to_string(BCType bc);
 
-void write_rank_layout_csv(const std::string& path,
-                           int rank,
-                           int nx_global,
-                           int ny_global,
-                           int x_offset,
-                           int y_offset,
-                           int nx_local,
-                           int ny_local,
-                           int halo);
+int open_netcdf_parallel(
+    const std::string& filename, const Decomp2D& dec, MPI_Comm comm, int& ncid, int& varid);
 
-std::string snapshot_filename_nc(const std::string& outdir, int step, int rank);
+bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step);
 
-bool write_field_netcdf(const Field& f, const std::string& filename, const Decomp2D& dec);
+void close_netcdf_parallel(int ncid);

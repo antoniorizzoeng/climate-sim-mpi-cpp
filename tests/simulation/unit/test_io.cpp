@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
-#include <netcdf.h>
+#include <mpi.h>
+#include <pnetcdf.h>
 
 #include <fstream>
 #include <string>
@@ -148,41 +149,44 @@ TEST(Unit_IO_CLI, MergedConfigNoYaml) {
     EXPECT_EQ(cfg.ny, 8);
 }
 
-TEST(Unit_IO_File, SnapshotFilenames) {
-    auto nc = snapshot_filename_nc("outdir", 7, 3);
-    EXPECT_NE(nc.find("snapshot_00007_rank00003.nc"), std::string::npos);
-}
-
-TEST(Unit_IO_File, RankLayoutAppendAndHeader) {
-    const std::string fname = "layout.csv";
-    write_rank_layout_csv(fname, 0, 8, 8, 0, 0, 8, 8, 1);
-    write_rank_layout_csv(fname, 1, 8, 8, 0, 0, 8, 8, 1);
-
-    std::ifstream ifs(fname);
-    std::string all((std::istreambuf_iterator<char>(ifs)), {});
-    EXPECT_NE(all.find("rank,x_offset"), std::string::npos);
-    EXPECT_NE(all.find("1,"), std::string::npos);
-    std::remove(fname.c_str());
-}
-
 TEST(Unit_IO_File, WriteNetCDFAndReadBack) {
-    auto dec = make_decomp(2, 2, 2, 2);
-    Field f(2, 2, 0, 1.0, 1.0);
-    f.at(0, 0) = 1.0;
-    f.at(1, 0) = 2.0;
-    f.at(0, 1) = 3.0;
-    f.at(1, 1) = 4.0;
+    int argc = 0;
+    char** argv = nullptr;
+    MPI_Init(&argc, &argv);
+    {
+        auto dec = make_decomp(2, 2, 2, 2);
+        Field f(2, 2, 0, 1.0, 1.0);
+        f.at(0, 0) = 1.0;
+        f.at(1, 0) = 2.0;
+        f.at(0, 1) = 3.0;
+        f.at(1, 1) = 4.0;
 
-    const std::string fname = "field.nc";
-    ASSERT_TRUE(write_field_netcdf(f, fname, dec));
+        const std::string fname = "field.nc";
+        int ncid, dimy, dimx, dimt, varid;
+        ASSERT_EQ(ncmpi_create(MPI_COMM_WORLD, fname.c_str(), NC_CLOBBER, MPI_INFO_NULL, &ncid),
+                  NC_NOERR);
+        ASSERT_EQ(ncmpi_def_dim(ncid, "time", NC_UNLIMITED, &dimt), NC_NOERR);
+        ASSERT_EQ(ncmpi_def_dim(ncid, "y", dec.ny_global, &dimy), NC_NOERR);
+        ASSERT_EQ(ncmpi_def_dim(ncid, "x", dec.nx_global, &dimx), NC_NOERR);
 
-    int ncid, varid;
-    ASSERT_EQ(nc_open(fname.c_str(), NC_NOWRITE, &ncid), NC_NOERR);
-    ASSERT_EQ(nc_inq_varid(ncid, "u", &varid), NC_NOERR);
-    std::vector<double> buf(4);
-    ASSERT_EQ(nc_get_var_double(ncid, varid, buf.data()), NC_NOERR);
-    EXPECT_NEAR(buf[3], 4.0, 1e-12);
-    nc_close(ncid);
+        int dims[3] = {dimt, dimy, dimx};
+        ASSERT_EQ(ncmpi_def_var(ncid, "u", NC_DOUBLE, 3, dims, &varid), NC_NOERR);
+        ASSERT_EQ(ncmpi_enddef(ncid), NC_NOERR);
 
-    std::remove(fname.c_str());
+        ASSERT_TRUE(write_field_netcdf(ncid, 0, f, dec, varid));
+
+        ASSERT_EQ(ncmpi_close(ncid), NC_NOERR);
+
+        // Re-open and check contents
+        int ncid2, varid2;
+        ASSERT_EQ(ncmpi_open(MPI_COMM_WORLD, fname.c_str(), NC_NOWRITE, MPI_INFO_NULL, &ncid2),
+                  NC_NOERR);
+        ASSERT_EQ(ncmpi_inq_varid(ncid2, "u", &varid2), NC_NOERR);
+        std::vector<double> buf(4);
+        ASSERT_EQ(ncmpi_get_var_double_all(ncid2, varid2, buf.data()), NC_NOERR);
+        EXPECT_NEAR(buf[3], 4.0, 1e-12);
+        ncmpi_close(ncid2);
+
+        std::remove(fname.c_str());
+    }
 }
