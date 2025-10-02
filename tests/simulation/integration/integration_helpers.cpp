@@ -16,8 +16,8 @@ inline void nc_check(int status, const char* where) {
 
 int run_mpi_cmd(const std::string& exe, const std::vector<std::string>& args) {
     std::ostringstream oss;
-    oss << MPIEXEC_EXECUTABLE << " " << MPIEXEC_NUMPROC_FLAG << " " << INTEGRATION_MPI_PROCS << " "
-        << exe;
+    oss << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << exe;
     for (const auto& a : args) oss << " " << a;
     std::string cmd = oss.str();
     std::cout << "[MPI CMD] " << cmd << "\n";
