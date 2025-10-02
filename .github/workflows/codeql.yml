@@ -27,7 +27,7 @@ jobs:
             cmake ninja-build g++ make \
             libopenmpi-dev openmpi-bin \
             libyaml-cpp-dev \
-            libnetcdf-dev libnetcdf-c++4-dev netcdf-bin
+            libnetcdf-dev libnetcdf-c++4-dev netcdf-bin libpnetcdf-dev
       - name: Build (compile for CodeQL)
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF
