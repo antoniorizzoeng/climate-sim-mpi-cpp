@@ -22,7 +22,7 @@ jobs:
             cmake ninja-build g++ make bc \
             libopenmpi-dev openmpi-bin \
             libyaml-cpp-dev \
-            libnetcdf-dev libnetcdf-c++4-dev netcdf-bin
+            libnetcdf-dev libnetcdf-c++4-dev netcdf-bin libpnetcdf-dev ffmpeg
 
       - name: Set up Python
         uses: actions/setup-python@v6

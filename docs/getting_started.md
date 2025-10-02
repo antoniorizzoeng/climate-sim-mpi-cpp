@@ -34,7 +34,7 @@ grid:    { nx: 512, ny: 512, dx: 1.0, dy: 1.0 }
 physics: { D: 0.5, vx: 0.5, vy: 0.0 }
 time:    { dt: 0.1, steps: 800, out_every: 10 }
 bc:      periodic
-output:  { prefix: "dev", format: "netcdf" }
+output:  { prefix: "dev" }
 ic:
   preset: gaussian_hotspot
   params: { A: 1.0, sigma_frac: 0.06, xc_frac: 0.5, yc_frac: 0.5 }
@@ -49,26 +49,16 @@ ic:
 
 ### Single frame (snapshot)
 ```bash
-python -m visualization.cli show --dir outputs --step 400 --save demo_frame.png       --overlay-minmax --overlay-rankgrid --overlay-rankboxes
+python -m visualization.cli show --dir outputs --step 400 --save demo_frame.png --overlay-minmax
 ```
 
 ### Animation
 ```bash
 # MP4 (requires ffmpeg)
-python -m visualization.cli animate --dir outputs --fps 24 --save demo.mp4       --overlay-minmax --overlay-rankgrid
+python -m visualization.cli animate --dir outputs --fps 24 --save demo.mp4 --overlay-minmax
 
 # GIF (using Pillow)
 python -m visualization.cli animate --dir outputs --fps 12 --save demo.gif --writer pillow
-```
-
-### Live watch (while sim is running)
-```bash
-python -m visualization.cli watch --dir outputs --interval 0.5
-```
-
-### Interactive navigation (←/→ to step frames)
-```bash
-python -m visualization.cli interactive --dir outputs --var u
 ```
 
 ## Tips

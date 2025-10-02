@@ -25,7 +25,16 @@ include(CTest)
 enable_testing()
 include(GoogleTest)
 
+find_path(NETCDF_INCLUDE_DIR netcdf.h
+          HINTS /usr/include /usr/local/include)
+find_library(NETCDF_LIBRARY netcdf
+             HINTS /usr/lib/x86_64-linux-gnu /usr/local/lib)
+if(NOT NETCDF_INCLUDE_DIR OR NOT NETCDF_LIBRARY)
+    message(FATAL_ERROR "NetCDF not found. Install libnetcdf-dev or build from source.")
+endif()
+
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 set(_IT_COMPILE_DEFS
   CLIMATE_SIM_EXE="$<TARGET_FILE:climate_sim>"
   PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
@@ -92,6 +101,7 @@ add_executable(test_advection simulation/unit/test_advection.cpp)
 target_link_libraries(test_advection PRIVATE core GTest::gtest GTest::gtest_main MPI::MPI_CXX)
 gtest_discover_tests(test_advection DISCOVERY_TIMEOUT 30)
 
+
 # ------------------------------
 # Integration tests
 # ------------------------------
@@ -102,8 +112,9 @@ add_library(integration_helpers STATIC
 target_include_directories(integration_helpers PUBLIC
   ${CMAKE_CURRENT_LIST_DIR}/integration
   ${CMAKE_SOURCE_DIR}/include
+  ${NETCDF_INCLUDE_DIR}
 )
-target_link_libraries(integration_helpers PUBLIC core MPI::MPI_CXX)
+target_link_libraries(integration_helpers PUBLIC core MPI::MPI_CXX ${NETCDF_LIBRARY})
 target_compile_definitions(integration_helpers PUBLIC ${_IT_COMPILE_DEFS})
 
 function(add_it name src)
@@ -116,6 +127,5 @@ endfunction()
 add_it(integration_netcdf_output     simulation/integration/integration_netcdf_output.cpp)
 add_it(integration_diffusion         simulation/integration/integration_diffusion.cpp)
 add_it(integration_advection         simulation/integration/integration_advection.cpp)
-add_it(integration_decomp_coverage   simulation/integration/integration_decomp_coverage.cpp)
 add_it(integration_boundary_error    simulation/integration/integration_boundary_error.cpp)
 add_it(integration_ic                simulation/integration/integration_ic.cpp)

@@ -1,154 +1,93 @@
 #include "integration_helpers.hpp"
 
-int run_cmd(const std::string& cmd) { return std::system(cmd.c_str()); }
+#include <netcdf.h>
 
-std::vector<std::vector<double>> read_nc_2d(const fs::path& p, const char* var) {
-    int ncid;
-    if (nc_open(p.c_str(), NC_NOWRITE, &ncid) != NC_NOERR)
-        throw std::runtime_error("nc_open failed for " + p.string());
+#include <cstdlib>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
 
-    int varid;
-    if (nc_inq_varid(ncid, var, &varid) != NC_NOERR) {
+inline void nc_check(int status, const char* where) {
+    if (status != NC_NOERR) {
+        throw std::runtime_error(std::string(where) + ": " + nc_strerror(status));
+    }
+}
+
+int run_mpi_cmd(const std::string& exe, const std::vector<std::string>& args) {
+    std::ostringstream oss;
+    oss << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
+        << INTEGRATION_MPI_PROCS << " " << exe;
+    for (const auto& a : args) oss << " " << a;
+    std::string cmd = oss.str();
+    std::cout << "[MPI CMD] " << cmd << "\n";
+    return std::system(cmd.c_str());
+}
+
+std::vector<std::vector<double>> read_nc_2d(const fs::path& file, int step, const char* var) {
+    int ncid, varid;
+    nc_check(nc_open(file.string().c_str(), NC_NOWRITE, &ncid), "nc_open");
+    nc_check(nc_inq_varid(ncid, var, &varid), "nc_inq_varid");
+
+    int ndims;
+    nc_check(nc_inq_varndims(ncid, varid, &ndims), "nc_inq_varndims");
+    if (ndims != 2 && ndims != 3) {
         nc_close(ncid);
-        throw std::runtime_error(std::string("nc_inq_varid failed for var ") + var);
+        throw std::runtime_error("unsupported rank " + std::to_string(ndims));
     }
 
-    nc_type vtype;
-    int ndims = 0;
     int dimids[NC_MAX_VAR_DIMS];
-    if (nc_inq_var(ncid, varid, nullptr, &vtype, &ndims, dimids, nullptr) != NC_NOERR) {
-        nc_close(ncid);
-        throw std::runtime_error("nc_inq_var failed");
-    }
-    if (ndims != 2) {
-        nc_close(ncid);
-        throw std::runtime_error("expected 2D var");
-    }
+    nc_check(nc_inq_vardimid(ncid, varid, dimids), "nc_inq_vardimid");
 
-    size_t ny = 0, nx = 0;
-    if (nc_inq_dimlen(ncid, dimids[0], &ny) != NC_NOERR ||
-        nc_inq_dimlen(ncid, dimids[1], &nx) != NC_NOERR) {
-        nc_close(ncid);
-        throw std::runtime_error("nc_inq_dimlen failed");
-    }
+    size_t sizes[3] = {1, 1, 1};
+    for (int d = 0; d < ndims; ++d)
+        nc_check(nc_inq_dimlen(ncid, dimids[d], &sizes[d]), "nc_inq_dimlen");
 
-    std::vector<double> flat(nx * ny);
-    if (vtype == NC_DOUBLE) {
-        if (nc_get_var_double(ncid, varid, flat.data()) != NC_NOERR) {
+    size_t NX = 0, NY = 0;
+    std::vector<double> flat;
+    if (ndims == 3) {
+        if (step < 0 || step >= (int)sizes[0]) {
             nc_close(ncid);
-            throw std::runtime_error("nc_get_var_double failed");
+            throw std::runtime_error("step out of range");
         }
-    } else if (vtype == NC_FLOAT) {
-        std::vector<float> f(nx * ny);
-        if (nc_get_var_float(ncid, varid, f.data()) != NC_NOERR) {
-            nc_close(ncid);
-            throw std::runtime_error("nc_get_var_float failed");
-        }
-        for (size_t i = 0; i < f.size(); ++i) flat[i] = (double)f[i];
+        NX = sizes[2];
+        NY = sizes[1];
+        flat.resize(NX * NY);
+        size_t start[3] = {(size_t)step, 0, 0}, count[3] = {1, NY, NX};
+        nc_check(nc_get_vara_double(ncid, varid, start, count, flat.data()),
+                 "nc_get_vara_double 3D");
     } else {
-        nc_close(ncid);
-        throw std::runtime_error("unsupported var type");
+        NX = sizes[1];
+        NY = sizes[0];
+        flat.resize(NX * NY);
+        size_t start[2] = {0, 0}, count[2] = {NY, NX};
+        nc_check(nc_get_vara_double(ncid, varid, start, count, flat.data()),
+                 "nc_get_vara_double 2D");
     }
 
-    nc_close(ncid);
+    nc_check(nc_close(ncid), "nc_close");
 
-    std::vector<std::vector<double>> grid(ny, std::vector<double>(nx));
-    for (size_t j = 0; j < ny; ++j)
-        for (size_t i = 0; i < nx; ++i) grid[j][i] = flat[j * nx + i];
+    std::vector<std::vector<double>> grid(NY, std::vector<double>(NX));
+    for (size_t j = 0; j < NY; ++j)
+        for (size_t i = 0; i < NX; ++i) grid[j][i] = flat[j * NX + i];
     return grid;
-}
-
-std::vector<RankTile> read_rank_layout(const fs::path& p) {
-    std::ifstream ifs(p);
-    if (!ifs)
-        throw std::runtime_error("Failed to open " + p.string());
-
-    std::string line;
-    if (!std::getline(ifs, line))
-        throw std::runtime_error("Empty rank layout: " + p.string());
-
-    std::vector<RankTile> tiles;
-    while (std::getline(ifs, line)) {
-        if (line.empty())
-            continue;
-        std::stringstream ss(line);
-        std::string tok;
-        RankTile t{};
-        std::getline(ss, tok, ',');
-        t.rank = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.x_off = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.y_off = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.nx = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.ny = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.halo = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.nxg = std::stoi(tok);
-        std::getline(ss, tok, ',');
-        t.nyg = std::stoi(tok);
-        tiles.push_back(t);
-    }
-    return tiles;
-}
-
-std::vector<std::vector<double>> assemble_global_nc_snapshot_from(const std::string& dir,
-                                                                  int step,
-                                                                  const char* var) {
-    auto tiles = read_rank_layout("outputs/rank_layout.csv");
-    if (tiles.empty())
-        throw std::runtime_error("rank_layout.csv has no tiles");
-
-    const int NX = tiles[0].nxg;
-    const int NY = tiles[0].nyg;
-    std::vector<std::vector<double>> U(NY, std::vector<double>(NX, 0.0));
-
-    for (const auto& t : tiles) {
-        char buf[256];
-        std::snprintf(buf, sizeof(buf), "snapshot_%05d_rank%05d.nc", step, t.rank);
-        fs::path f = fs::path(dir) / buf;
-        if (!fs::exists(f))
-            throw std::runtime_error("Missing snapshot: " + f.string());
-
-        auto tile = read_nc_2d(f, var);
-        if (tile.empty())
-            throw std::runtime_error("Empty tile: " + f.string());
-
-        const int ny_nc = (int)tile.size();
-        const int nx_nc = (int)tile[0].size();
-        int off = 0;
-        if (ny_nc == t.ny && nx_nc == t.nx) {
-            off = 0;
-        } else if (ny_nc == t.ny + 2 * t.halo && nx_nc == t.nx + 2 * t.halo) {
-            off = t.halo;
-        } else {
-            throw std::runtime_error("NetCDF tile shape mismatch");
-        }
-
-        for (int j = 0; j < t.ny; ++j)
-            for (int i = 0; i < t.nx; ++i) U[t.y_off + j][t.x_off + i] = tile[j + off][i + off];
-    }
-    return U;
 }
 
 double sum2d(const std::vector<std::vector<double>>& A) {
     double s = 0.0;
-    for (const auto& r : A)
+    for (auto& r : A)
         for (double v : r) s += v;
     return s;
 }
-
 double com_x(const std::vector<std::vector<double>>& A) {
     const int NY = (int)A.size();
-    const int NX = (NY > 0 ? (int)A[0].size() : 0);
+    const int NX = NY ? (int)A[0].size() : 0;
     double m = 0.0, sx = 0.0;
     for (int j = 0; j < NY; ++j)
         for (int i = 0; i < NX; ++i) {
-            m += A[j][i];
-            sx += A[j][i] * (i + 0.5);
+            double v = A[j][i];
+            m += v;
+            sx += v * (i + 0.5);
         }
     return sx / std::max(m, 1e-300);
 }

@@ -4,27 +4,30 @@
 
 TEST(Integration, Diffusion_DecreasesPeak) {
     fs::remove_all("outputs");
-    fs::create_directories("outputs/snapshots");
 
-    std::ostringstream cmd;
-    cmd << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
-        << INTEGRATION_MPI_PROCS << " " << CLIMATE_SIM_EXE << " --nx=64 --ny=64 --dx=1 --dy=1"
-        << " --D=1.0 --vx=0 --vy=0"
-        << " --dt=0.1 --steps=11 --out_every=10"
-        << " --bc=periodic"
-        << " --ic.mode=preset --ic.preset=gaussian_hotspot --ic.A=1.0 --ic.sigma_frac=0.1";
-    ASSERT_EQ(run_cmd(cmd.str()), 0);
+    std::vector<std::string> args = {"--nx=64",
+                                     "--ny=64",
+                                     "--dx=1",
+                                     "--dy=1",
+                                     "--D=1.0",
+                                     "--vx=0",
+                                     "--vy=0",
+                                     "--dt=0.1",
+                                     "--steps=10",
+                                     "--out_every=1",
+                                     "--bc=periodic",
+                                     "--ic.mode=preset",
+                                     "--ic.preset=gaussian_hotspot",
+                                     "--ic.A=1.0",
+                                     "--ic.sigma_frac=0.1"};
+    ASSERT_EQ(run_mpi_cmd(CLIMATE_SIM_EXE, args), 0);
 
-    fs::path snap0_r0 = fs::path("outputs/snapshots") / "snapshot_00000_rank00000.nc";
-    fs::path snap10_r0 = fs::path("outputs/snapshots") / "snapshot_00010_rank00000.nc";
-    ASSERT_TRUE(fs::exists(snap0_r0));
-    ASSERT_TRUE(fs::exists(snap10_r0));
+    fs::path simfile = "outputs/snapshots.nc";
+    ASSERT_TRUE(fs::exists(simfile));
 
-    auto U0 = assemble_global_nc_snapshot_from("outputs/snapshots", 0, "u");
-    auto U10 = assemble_global_nc_snapshot_from("outputs/snapshots", 10, "u");
+    auto U0 = read_nc_2d(simfile, 0, "u");
+    auto U10 = read_nc_2d(simfile, 9, "u");
 
-    ASSERT_FALSE(U0.empty());
-    ASSERT_FALSE(U10.empty());
     ASSERT_EQ(U0.size(), 64u);
     ASSERT_EQ(U0[0].size(), 64u);
     ASSERT_EQ(U10.size(), 64u);

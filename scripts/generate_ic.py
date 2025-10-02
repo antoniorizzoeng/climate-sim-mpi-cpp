@@ -39,8 +39,8 @@ def write_netcdf(U, out_path, dx=1.0, dy=1.0, var="u"):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--nx", type=int, default=256)
-    p.add_argument("--ny", type=int, default=512)
+    p.add_argument("--nx", type=int, default=16)
+    p.add_argument("--ny", type=int, default=16)
     p.add_argument("--dx", type=float, default=1.0)
     p.add_argument("--dy", type=float, default=1.0)
     p.add_argument("--amp", type=float, default=1.0)

@@ -12,18 +12,20 @@ add_library(core
 target_include_directories(core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(core PUBLIC MPI::MPI_CXX yaml-cpp)
 
-find_package(NetCDF QUIET)
+find_path(PNETCDF_INCLUDE_DIR pnetcdf.h
+          HINTS /usr/include /usr/local/include)
 
-if(NetCDF_FOUND)
-    message(STATUS "Found NetCDF via CMake config")
-    target_link_libraries(core PUBLIC NetCDF::NetCDF)
-else()
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(NETCDF REQUIRED netcdf)
-    message(STATUS "Found NetCDF via pkg-config")
-    target_include_directories(core PUBLIC ${NETCDF_INCLUDE_DIRS})
-    target_link_libraries(core PUBLIC ${NETCDF_LIBRARIES})
+find_library(PNETCDF_LIBRARY pnetcdf
+             HINTS /usr/lib/x86_64-linux-gnu /usr/local/lib)
+
+if(NOT PNETCDF_INCLUDE_DIR OR NOT PNETCDF_LIBRARY)
+    message(FATAL_ERROR "PnetCDF not found. Install libpnetcdf-dev or build from source.")
 endif()
+
+message(STATUS "Found PnetCDF: include at ${PNETCDF_INCLUDE_DIR}, lib at ${PNETCDF_LIBRARY}")
+
+target_include_directories(core PUBLIC ${PNETCDF_INCLUDE_DIR})
+target_link_libraries(core PUBLIC ${PNETCDF_LIBRARY})
 
 add_executable(climate_sim main.cpp)
 target_link_libraries(climate_sim PRIVATE core)
