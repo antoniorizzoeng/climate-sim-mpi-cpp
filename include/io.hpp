@@ -29,7 +29,7 @@ struct SimConfig {
     int steps = 100;
     int out_every = 50;
 
-    BCType bc = BCType::Dirichlet;
+    BCConfig bc;
 
     std::string output_prefix = "snap";
 
@@ -47,7 +47,7 @@ struct CLIOverrides {
     std::optional<double> dt;
     std::optional<int> steps, out_every;
 
-    std::optional<BCType> bc;
+    std::optional<BCType> bc_left, bc_right, bc_bottom, bc_top;
 
     std::optional<std::string> output_prefix;
 

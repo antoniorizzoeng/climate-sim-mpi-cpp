@@ -17,7 +17,12 @@ static SimConfig base_config(int nx = 16, int ny = 12) {
     cfg.dt = 0.1;
     cfg.steps = 1;
     cfg.out_every = 1;
-    cfg.bc = BCType::Periodic;
+
+    cfg.bc.left = BCType::Periodic;
+    cfg.bc.right = BCType::Periodic;
+    cfg.bc.bottom = BCType::Periodic;
+    cfg.bc.top = BCType::Periodic;
+
     cfg.ic.mode = "preset";
     cfg.ic.preset = "gaussian_hotspot";
     cfg.ic.A = 1.0;
@@ -64,11 +69,12 @@ TEST(Unit_Init_IC, GaussianHotspotPreset) {
     apply_initial_condition(dec, u, cfg);
 
     bool has_nonzero = false;
-    for (int j = 0; j < u.ny_total(); ++j)
-        for (int i = 0; i < u.nx_total(); ++i)
+    for (int j = 0; j < u.ny_total(); ++j) {
+        for (int i = 0; i < u.nx_total(); ++i) {
             if (u.at(i, j) > 1e-12)
                 has_nonzero = true;
-
+        }
+    }
     EXPECT_TRUE(has_nonzero);
 }
 

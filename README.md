@@ -27,15 +27,11 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - Timing statistics logged at end of run.
 
 ### Visualization (Python)
-- Reassemble distributed per-rank snapshots into global arrays.
 - Supported format: NetCDF.
 - Plot utilities:
   - Single field plots with colorbars.
   - Field comparison with optional difference panel.
   - Animation of time steps (MP4 / GIF).
-- Watch mode:
-  - Incrementally rebuild canvas while simulation is running.
-  - Options for refresh rate, starting from latest N frames.
 - CLI entrypoint for manual visualization tasks.
 
 ---
@@ -47,6 +43,7 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - CMake ≥ 3.16
 - MPI implementation (OpenMPI, MPICH, etc.)
 - NetCDF-C library
+- PnetCDF-C library
 
 ## Build & Run
 
@@ -81,12 +78,6 @@ python -m visualization.cli show --dir outputs --step 10 --save frame.png
 
 # Animate all steps into a GIF
 python -m visualization.cli animate --dir outputs --save anim.gif --writer pillow
-
-# Watch live simulation outputs
-python -m visualization.cli watch --dir outputs --interval 1.0
-
-# Interactive simulation viz
-python -m visualization.cli interactive --dir outputs
 ```
 ---
 
