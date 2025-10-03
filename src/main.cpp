@@ -52,8 +52,11 @@ int main(int argc, char** argv) {
         std::cout << "climate-sim-mpi-cpp \n"
                   << "  grid: " << cfg.nx << " x " << cfg.ny << "  dt: " << cfg.dt
                   << "  steps: " << cfg.steps << "  D: " << cfg.D << "  v=(" << cfg.vx << ","
-                  << cfg.vy << ")"
-                  << "  bc=" << bc_to_string(cfg.bc) << "\n";
+                  << cfg.vy << ")\n"
+                  << "  bc: left=" << bc_to_string(cfg.bc.left)
+                  << " right=" << bc_to_string(cfg.bc.right)
+                  << " bottom=" << bc_to_string(cfg.bc.bottom)
+                  << " top=" << bc_to_string(cfg.bc.top) << "\n";
     }
 
     Decomp2D dec;
@@ -96,7 +99,7 @@ int main(int argc, char** argv) {
         }
 
         exchange_halos(u, dec, MPI_COMM_WORLD);
-        apply_boundary(u, dec, cfg.bc);
+        apply_boundary(u, dec, cfg.bc, 0.0);
 
         std::copy(u.data.begin(), u.data.end(), tmp.data.begin());
 

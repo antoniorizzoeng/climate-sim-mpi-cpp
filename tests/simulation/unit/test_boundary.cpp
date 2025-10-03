@@ -24,11 +24,16 @@ TEST(Unit_Boundary, DirichletAndNeumannSingleRank) {
 
     const int h = 1;
     Field f(NX, NY, h, 1.0, 1.0);
+
     f.fill(-1.0);
     for (int j = h; j < h + NY; ++j)
         for (int i = h; i < h + NX; ++i) f.at(i, j) = 10.0;
 
-    apply_boundary(f, dec, BCType::Dirichlet, 5.0);
+    BCConfig bc_dir;
+    bc_dir.left = bc_dir.right = bc_dir.bottom = bc_dir.top = BCType::Dirichlet;
+
+    apply_boundary(f, dec, bc_dir, 5.0);
+
     for (int j = 0; j < f.ny_total(); ++j) {
         EXPECT_DOUBLE_EQ(f.at(0, j), 5.0);
         EXPECT_DOUBLE_EQ(f.at(h + NX, j), 5.0);
@@ -42,7 +47,10 @@ TEST(Unit_Boundary, DirichletAndNeumannSingleRank) {
     for (int j = h; j < h + NY; ++j)
         for (int i = h; i < h + NX; ++i) f.at(i, j) = static_cast<double>(j);
 
-    apply_boundary(f, dec, BCType::Neumann);
+    BCConfig bc_neu;
+    bc_neu.left = bc_neu.right = bc_neu.bottom = bc_neu.top = BCType::Neumann;
+
+    apply_boundary(f, dec, bc_neu, 0.0);
 
     for (int j = 0; j < f.ny_total(); ++j) {
         EXPECT_DOUBLE_EQ(f.at(0, j), f.at(h, j));

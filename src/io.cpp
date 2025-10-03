@@ -123,10 +123,19 @@ SimConfig load_yaml_file(const std::string& path) {
     }
 
     if (root["bc"]) {
-        if (root["bc"].IsScalar()) {
-            cfg.bc = bc_from_string(root["bc"].as<std::string>());
-        } else if (root["bc"]["type"]) {
-            cfg.bc = bc_from_string(root["bc"]["type"].as<std::string>());
+        auto bcnode = root["bc"];
+        if (bcnode.IsScalar()) {
+            auto b = bc_from_string(bcnode.as<std::string>());
+            cfg.bc.left = cfg.bc.right = cfg.bc.bottom = cfg.bc.top = b;
+        } else {
+            if (bcnode["left"])
+                cfg.bc.left = bc_from_string(bcnode["left"].as<std::string>());
+            if (bcnode["right"])
+                cfg.bc.right = bc_from_string(bcnode["right"].as<std::string>());
+            if (bcnode["bottom"])
+                cfg.bc.bottom = bc_from_string(bcnode["bottom"].as<std::string>());
+            if (bcnode["top"])
+                cfg.bc.top = bc_from_string(bcnode["top"].as<std::string>());
         }
     }
 
@@ -233,15 +242,44 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
         if (try_set_int(a, "out_every", o.out_every, i))
             continue;
 
-        if (starts_with(a, "--bc=") || a == "--bc") {
+        if (starts_with(a, "--bc.left=") || a == "--bc.left") {
             std::string val;
-            if (auto v = get_value(a, "bc"))
+            if (auto v = get_value(a, "bc.left"))
                 val = *v;
-            else if (a == "--bc" && i + 1 < args.size())
+            else if (a == "--bc.left" && i + 1 < args.size())
                 val = args[i + 1];
-            else
-                continue;
-            o.bc = bc_from_string(val);
+            if (!val.empty())
+                o.bc_left = bc_from_string(val);
+            continue;
+        }
+        if (starts_with(a, "--bc.right=") || a == "--bc.right") {
+            std::string val;
+            if (auto v = get_value(a, "bc.right"))
+                val = *v;
+            else if (a == "--bc.right" && i + 1 < args.size())
+                val = args[i + 1];
+            if (!val.empty())
+                o.bc_right = bc_from_string(val);
+            continue;
+        }
+        if (starts_with(a, "--bc.bottom=") || a == "--bc.bottom") {
+            std::string val;
+            if (auto v = get_value(a, "bc.bottom"))
+                val = *v;
+            else if (a == "--bc.bottom" && i + 1 < args.size())
+                val = args[i + 1];
+            if (!val.empty())
+                o.bc_bottom = bc_from_string(val);
+            continue;
+        }
+        if (starts_with(a, "--bc.top=") || a == "--bc.top") {
+            std::string val;
+            if (auto v = get_value(a, "bc.top"))
+                val = *v;
+            else if (a == "--bc.top" && i + 1 < args.size())
+                val = args[i + 1];
+            if (!val.empty())
+                o.bc_top = bc_from_string(val);
             continue;
         }
 
@@ -294,8 +332,14 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
     if (o.out_every)
         base.out_every = *o.out_every;
 
-    if (o.bc)
-        base.bc = *o.bc;
+    if (o.bc_left)
+        base.bc.left = *o.bc_left;
+    if (o.bc_right)
+        base.bc.right = *o.bc_right;
+    if (o.bc_bottom)
+        base.bc.bottom = *o.bc_bottom;
+    if (o.bc_top)
+        base.bc.top = *o.bc_top;
 
     if (o.output_prefix)
         base.output_prefix = *o.output_prefix;

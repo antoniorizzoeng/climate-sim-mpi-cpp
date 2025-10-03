@@ -36,7 +36,12 @@ TEST(Unit_IO_Yaml, LoadsNestedBlocksAndBC) {
     EXPECT_GT(cfg.nx, 0);
     EXPECT_GT(cfg.ny, 0);
     EXPECT_GT(cfg.dt, 0.0);
-    EXPECT_EQ(bc_to_string(cfg.bc), "periodic");
+
+    EXPECT_EQ(bc_to_string(cfg.bc.left), "dirichlet");
+    EXPECT_EQ(bc_to_string(cfg.bc.right), "neumann");
+    EXPECT_EQ(bc_to_string(cfg.bc.bottom), "periodic");
+    EXPECT_EQ(bc_to_string(cfg.bc.top), "dirichlet");
+
     EXPECT_GE(cfg.D, 0.0);
 }
 
@@ -52,14 +57,15 @@ TEST(Unit_IO_CLI, SimpleScalarOverrides) {
     }
 
     std::vector<std::string> args = {
-        "--nx=128", "--ny=256", "--dt=0.2", "--bc=periodic", "--output_prefix=from_cli"};
+        "--nx=128", "--ny=256", "--dt=0.2", "--bc.left=periodic", "--output_prefix=from_cli"};
 
     SimConfig merged = merged_config(tmpfile, args);
 
     EXPECT_EQ(merged.nx, 128);
     EXPECT_EQ(merged.ny, 256);
     EXPECT_DOUBLE_EQ(merged.dt, 0.2);
-    EXPECT_EQ(bc_to_string(merged.bc), "periodic");
+    EXPECT_EQ(bc_to_string(merged.bc.left), "periodic");
+    EXPECT_EQ(bc_to_string(merged.bc.right), "dirichlet");
     EXPECT_EQ(merged.output_prefix, "from_cli");
 }
 
@@ -88,10 +94,20 @@ TEST(Unit_IO_BC, ParseRoundtrip) {
     EXPECT_EQ(bc_to_string(BCType::Dirichlet), std::string("dirichlet"));
     EXPECT_EQ(bc_to_string(BCType::Neumann), std::string("neumann"));
     EXPECT_EQ(bc_to_string(BCType::Periodic), std::string("periodic"));
+
+    BCConfig bc;
+    bc.left = BCType::Neumann;
+    bc.right = BCType::Dirichlet;
+    bc.bottom = BCType::Periodic;
+    bc.top = BCType::Neumann;
+    EXPECT_EQ(bc_to_string(bc.left), "neumann");
+    EXPECT_EQ(bc_to_string(bc.right), "dirichlet");
+    EXPECT_EQ(bc_to_string(bc.bottom), "periodic");
+    EXPECT_EQ(bc_to_string(bc.top), "neumann");
 }
 
 TEST(Unit_IO_CLI, InvalidBoundaryConditionThrows) {
-    std::vector<std::string> args = {"--bc=foobar"};
+    std::vector<std::string> args = {"--bc.left=foobar"};
     EXPECT_THROW({ merged_config(std::nullopt, args); }, std::runtime_error);
 }
 
@@ -177,7 +193,6 @@ TEST(Unit_IO_File, WriteNetCDFAndReadBack) {
 
         ASSERT_EQ(ncmpi_close(ncid), NC_NOERR);
 
-        // Re-open and check contents
         int ncid2, varid2;
         ASSERT_EQ(ncmpi_open(MPI_COMM_WORLD, fname.c_str(), NC_NOWRITE, MPI_INFO_NULL, &ncid2),
                   NC_NOERR);
