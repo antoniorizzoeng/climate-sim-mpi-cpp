@@ -419,3 +419,25 @@ bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec
 }
 
 void close_netcdf_parallel(int ncid) { ncmpi_close(ncid); }
+
+void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
+    int status;
+
+    auto put_attr = [&](const char* name, const std::string& value) {
+        status = ncmpi_put_att_text(ncid, NC_GLOBAL, name, value.size(), value.c_str());
+        if (status != NC_NOERR) {
+            std::cerr << "Error writing attribute " << name << ": " << ncmpi_strerror(status)
+                      << "\n";
+        }
+    };
+
+    put_attr("description", "climate-sim-mpi-cpp");
+    put_attr("grid", std::to_string(cfg.nx) + " x " + std::to_string(cfg.ny));
+    put_attr("dt", std::to_string(cfg.dt));
+    put_attr("steps", std::to_string(cfg.steps));
+    put_attr("D", std::to_string(cfg.D));
+    put_attr("velocity", "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) + ")");
+    put_attr("boundary_conditions",
+             "left=" + bc_to_string(cfg.bc.left) + " right=" + bc_to_string(cfg.bc.right) +
+                 " bottom=" + bc_to_string(cfg.bc.bottom) + " top=" + bc_to_string(cfg.bc.top));
+}
