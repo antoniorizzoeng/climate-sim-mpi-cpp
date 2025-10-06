@@ -205,3 +205,61 @@ TEST(Unit_IO_File, WriteNetCDFAndReadBack) {
         std::remove(fname.c_str());
     }
 }
+
+TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
+    int argc = 0;
+    char** argv = nullptr;
+    MPI_Init(&argc, &argv);
+
+    const std::string fname = "metadata_test_pnetcdf.nc";
+    int ncid;
+
+    MPI_Info info = MPI_INFO_NULL;
+    int status =
+        ncmpi_create(MPI_COMM_WORLD, fname.c_str(), NC_CLOBBER | NC_64BIT_DATA, info, &ncid);
+    ASSERT_EQ(status, NC_NOERR);
+
+    SimConfig cfg;
+    cfg.nx = 8;
+    cfg.ny = 16;
+    cfg.dt = 0.123;
+    cfg.steps = 10;
+    cfg.D = 0.01;
+    cfg.vx = 1.0;
+    cfg.vy = -1.0;
+    cfg.bc.left = BCType::Dirichlet;
+    cfg.bc.right = BCType::Neumann;
+    cfg.bc.bottom = BCType::Periodic;
+    cfg.bc.top = BCType::Dirichlet;
+
+    write_metadata_netcdf(ncid, cfg);
+
+    status = ncmpi_close(ncid);
+    ASSERT_EQ(status, NC_NOERR);
+
+    status = ncmpi_open(MPI_COMM_WORLD, fname.c_str(), NC_NOWRITE, info, &ncid);
+    ASSERT_EQ(status, NC_NOERR);
+
+    auto read_text_att = [&](const char* name) -> std::string {
+        MPI_Offset len;
+        status = ncmpi_inq_attlen(ncid, NC_GLOBAL, name, &len);
+        EXPECT_EQ(status, NC_NOERR);
+
+        std::vector<char> buf(len);
+        status = ncmpi_get_att_text(ncid, NC_GLOBAL, name, buf.data());
+        EXPECT_EQ(status, NC_NOERR);
+
+        return std::string(buf.begin(), buf.end());
+    };
+
+    EXPECT_EQ(read_text_att("description"), "climate-sim-mpi-cpp");
+    EXPECT_EQ(read_text_att("grid"), "8 x 16");
+    EXPECT_EQ(read_text_att("boundary_conditions"),
+              "left=dirichlet right=neumann bottom=periodic top=dirichlet");
+
+    status = ncmpi_close(ncid);
+    ASSERT_EQ(status, NC_NOERR);
+    std::remove(fname.c_str());
+
+    MPI_Finalize();
+}

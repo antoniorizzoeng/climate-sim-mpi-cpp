@@ -73,3 +73,5 @@ int open_netcdf_parallel(
 bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step);
 
 void close_netcdf_parallel(int ncid);
+
+void write_metadata_netcdf(int ncid, const SimConfig& cfg);

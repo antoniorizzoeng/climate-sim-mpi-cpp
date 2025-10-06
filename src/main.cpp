@@ -86,6 +86,10 @@ int main(int argc, char** argv) {
         std::cout << "Opening NetCDF file for parallel output\n";
     open_netcdf_parallel("outputs/snapshots.nc", dec, MPI_COMM_WORLD, ncid, varid);
 
+    if (world_rank == 0)
+        write_metadata_netcdf(ncid, cfg);
+    MPI_Barrier(MPI_COMM_WORLD);
+
     double t0 = MPI_Wtime();
     double sum_step = 0.0, max_step = 0.0, min_step = 1e300;
 
