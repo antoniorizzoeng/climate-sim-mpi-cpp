@@ -67,8 +67,12 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
 BCType bc_from_string(const std::string& s);
 std::string bc_to_string(BCType bc);
 
-int open_netcdf_parallel(
-    const std::string& filename, const Decomp2D& dec, MPI_Comm comm, int& ncid, int& varid);
+int open_netcdf_parallel(const std::string& filename,
+                         const Decomp2D& dec,
+                         const SimConfig& cfg,
+                         MPI_Comm comm,
+                         int& ncid,
+                         int& varid);
 
 bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step);
 

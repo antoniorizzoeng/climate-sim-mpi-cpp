@@ -375,8 +375,12 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
     return cfg;
 }
 
-int open_netcdf_parallel(
-    const std::string& filename, const Decomp2D& dec, MPI_Comm comm, int& ncid, int& varid) {
+int open_netcdf_parallel(const std::string& filename,
+                         const Decomp2D& dec,
+                         const SimConfig& cfg,
+                         MPI_Comm comm,
+                         int& ncid,
+                         int& varid) {
     int dim_time, dim_y, dim_x;
     int status =
         ncmpi_create(comm, filename.c_str(), NC_CLOBBER | NC_64BIT_DATA, MPI_INFO_NULL, &ncid);
@@ -389,12 +393,13 @@ int open_netcdf_parallel(
     int dims[3] = {dim_time, dim_y, dim_x};
     ncmpi_check(ncmpi_def_var(ncid, "u", NC_DOUBLE, 3, dims, &varid), "def_var u");
 
+    write_metadata_netcdf(ncid, cfg);
+
     ncmpi_check(ncmpi_enddef(ncid), "enddef");
     return NC_NOERR;
 }
 
 bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step) {
-    // hyperslab: [time, y, x]
     MPI_Offset start[3], count[3];
     start[0] = step;
     start[1] = dec.y_offset;

@@ -1,6 +1,6 @@
 import argparse
 from typing import Optional, Sequence
-from .io import load_global, list_available_steps
+from .io import load_global, list_available_steps, load_metadata
 from .plots import imshow_field, compare_fields, animate_from_outputs
 
 
@@ -22,6 +22,7 @@ def cmd_show(args: argparse.Namespace) -> None:
         raise SystemExit(f"No snapshots found in {args.dir}/snapshots")
     step = args.step if args.step is not None else steps[-1]
     U = load_global(args.dir, step, var=args.var)
+    meta = load_metadata(args.dir) if args.show_meta else None
     imshow_field(
         U,
         title=args.title or f"{args.dir} :: step {step}",
@@ -31,12 +32,15 @@ def cmd_show(args: argparse.Namespace) -> None:
         show=args.show,
         save=args.save,
         overlay_minmax=args.overlay_minmax,
+        metadata=meta,
     )
 
 
 def cmd_compare(args: argparse.Namespace) -> None:
     Ua = load_global(args.dir_a, args.step, var=args.var_a)
     Ub = load_global(args.dir_b, args.step, var=args.var_b)
+    meta_a = load_metadata(args.dir_a) if args.show_meta else None
+    meta_b = load_metadata(args.dir_b) if args.show_meta else None
     compare_fields(
         Ua,
         Ub,
@@ -50,6 +54,8 @@ def cmd_compare(args: argparse.Namespace) -> None:
         show=args.show,
         save=args.save,
         overlay_minmax=args.overlay_minmax,
+        metadata_a=meta_a,
+        metadata_b=meta_b,
     )
 
 
@@ -66,6 +72,7 @@ def cmd_animate(args: argparse.Namespace) -> None:
             b = args.end if args.end is not None else avail[-1]
             stride = args.stride if args.stride is not None else 1
             sel = [k for k in avail if a <= k <= b][::stride]
+    meta = load_metadata(args.dir) if args.show_meta else None
     animate_from_outputs(
         args.dir,
         var=args.var,
@@ -80,6 +87,7 @@ def cmd_animate(args: argparse.Namespace) -> None:
         writer=args.writer,
         title_prefix=args.title_prefix,
         overlay_minmax=args.overlay_minmax,
+        metadata=meta,
     )
 
 
@@ -101,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--show", action="store_true")
     ps.add_argument("--save")
     ps.add_argument("--overlay-minmax", action="store_true")
+    ps.add_argument("--show-meta", action="store_true", help="Overlay metadata on image")
     ps.set_defaults(func=cmd_show)
 
     pc = sub.add_parser("compare", help="Side-by-side comparison")
@@ -120,6 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--show", action="store_true")
     pc.add_argument("--save")
     pc.add_argument("--overlay-minmax", action="store_true")
+    pc.add_argument("--show-meta", action="store_true", help="Overlay metadata on images")
     pc.set_defaults(func=cmd_compare)
 
     pa = sub.add_parser("animate", help="Create animation")
@@ -141,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--writer", choices=["ffmpeg", "pillow"])
     pa.add_argument("--title-prefix", default="timestep")
     pa.add_argument("--overlay-minmax", action="store_true")
+    pa.add_argument("--show-meta", action="store_true", help="Overlay metadata on animation")
     pa.set_defaults(func=cmd_animate)
 
     return p

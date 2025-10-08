@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, Dict
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
@@ -24,6 +24,63 @@ def _overlay_minmax(ax: plt.Axes, U: np.ndarray) -> None:
     )
 
 
+def _overlay_metadata(ax: plt.Axes, metadata: Dict[str, str]) -> None:
+    if not metadata:
+        return
+
+    desc = metadata.get("description", "")
+    grid = metadata.get("grid", "")
+    dt = metadata.get("dt", "")
+    D = metadata.get("D", "")
+    velocity = metadata.get("velocity", "")
+    subtitle_parts = []
+    if grid: subtitle_parts.append(f"grid={grid}")
+    if dt: subtitle_parts.append(f"dt={dt}")
+    if D: subtitle_parts.append(f"D={D}")
+    if velocity: subtitle_parts.append(f"v={velocity}")
+    subtitle = " | ".join(subtitle_parts)
+
+    if desc or subtitle:
+        ax.text(
+            0.5, 0.96,
+            f"{desc}\n{subtitle}",
+            transform=ax.transAxes,
+            ha="center", va="top",
+            fontsize=9, color="gray",
+        )
+
+    bc_text = metadata.get("boundary_conditions", "")
+    if not bc_text:
+        return
+
+    try:
+        bcs = {kv.split("=")[0]: kv.split("=")[1] for kv in bc_text.split()}
+    except Exception:
+        bcs = {}
+
+    style = dict(fontsize=9, color="black")
+
+    if "left" in bcs:
+        label = bcs["left"]
+        ax.text(-0.12, 0.5, label,
+                transform=ax.transAxes, rotation=90,
+                ha="right", va="center", **style)
+    if "right" in bcs:
+        label = bcs["right"]
+        ax.text(1.12, 0.5, label,
+                transform=ax.transAxes, rotation=-90,
+                ha="left", va="center", **style)
+    if "bottom" in bcs:
+        label = bcs["bottom"]
+        ax.text(0.5, -0.12, label,
+                transform=ax.transAxes,
+                ha="center", va="top", **style)
+    if "top" in bcs:
+        label = bcs["top"]
+        ax.text(0.5, 1.10, label,
+                transform=ax.transAxes,
+                ha="center", va="bottom", **style)
+
 def imshow_field(
     U: np.ndarray,
     title: Optional[str] = None,
@@ -34,6 +91,7 @@ def imshow_field(
     show: bool = False,
     save: Optional[str] = None,
     overlay_minmax: bool = False,
+    metadata: Optional[Dict[str, str]] = None,
 ):
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 6))
@@ -47,6 +105,9 @@ def imshow_field(
 
     if overlay_minmax:
         _overlay_minmax(ax, U)
+
+    if metadata:
+        _overlay_metadata(ax, metadata)
 
     if save:
         fig.savefig(save, dpi=150, bbox_inches="tight")
@@ -69,6 +130,8 @@ def compare_fields(
     show: bool = False,
     save: Optional[str] = None,
     overlay_minmax: bool = False,
+    metadata_a: Optional[Dict[str, str]] = None,
+    metadata_b: Optional[Dict[str, str]] = None,
 ):
     assert A.shape == B.shape, "Fields must have the same shape"
 
@@ -88,11 +151,15 @@ def compare_fields(
     axA.set_title(titles[0])
     if overlay_minmax:
         _overlay_minmax(axA, A)
+    if metadata_a:
+        _overlay_metadata(axA, metadata_a)
 
     _imshow(axB, B, cmap, vmin, vmax)
     axB.set_title(titles[1])
     if overlay_minmax:
         _overlay_minmax(axB, B)
+    if metadata_b:
+        _overlay_metadata(axB, metadata_b)
 
     if show_diff:
         D = B - A
@@ -125,6 +192,7 @@ def animate_from_outputs(
     title_prefix: str = "timestep",
     show: bool = False,
     overlay_minmax: bool = False,
+    metadata: Optional[Dict[str, str]] = None,
 ):
     if steps is None:
         steps = list_available_steps(base_outputs_dir)
@@ -142,25 +210,27 @@ def animate_from_outputs(
     im = _imshow(ax, first, cmap, vmin, vmax)
     ttl = ax.set_title(f"{title_prefix}: {steps[0]}")
 
-    text_overlay = None
     if overlay_minmax:
-        umin, umax = float(np.nanmin(first)), float(np.nanmax(first))
-        text_overlay = ax.text(
-            0.99, 0.99, f"min={umin:.2f}\nmax={umax:.2f}",
-            transform=ax.transAxes, ha="right", va="top",
-            fontsize=8, color="white",
-            bbox=dict(facecolor="black", alpha=0.5, edgecolor="none")
-        )
+        _overlay_minmax(ax, first)
+    if metadata:
+        _overlay_metadata(ax, metadata)
 
     def _update(frame_idx: int):
         step = steps[frame_idx]
         U = load_global(base_outputs_dir, step, var=var)
         im.set_data(U)
         ttl.set_text(f"{title_prefix}: {step}")
-        if overlay_minmax and text_overlay is not None:
-            umin, umax = float(np.nanmin(U)), float(np.nanmax(U))
-            text_overlay.set_text(f"min={umin:.2f}\nmax={umax:.2f}")
-        return [im] + ([text_overlay] if text_overlay else [])
+
+        for txt in ax.texts[:]:
+            txt.remove()
+
+        if overlay_minmax:
+            _overlay_minmax(ax, U)
+        if metadata:
+            _overlay_metadata(ax, metadata)
+
+        return [im]
+
 
     anim = FuncAnimation(fig, _update, frames=len(steps),
                          interval=interval_ms, blit=False, repeat=repeat)
@@ -177,6 +247,4 @@ def animate_from_outputs(
         plt.show()
 
     return anim, fig, ax
-
-
 
