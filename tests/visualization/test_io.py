@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import netCDF4
 
-from visualization.io import _snapshots_dir, list_available_steps, load_global
+from visualization.io import _snapshots_dir, list_available_steps, load_global, load_metadata
 
 def test_snapshots_dir_missing(tmp_path):
     missing_dir = tmp_path / "nonexistent"
@@ -84,3 +84,11 @@ def test_load_global_returns_correct_array(tmp_path):
     assert isinstance(out, np.ndarray)
     assert out.shape == (2, 2)
     assert np.array_equal(out, arr[0])
+
+def test_load_metadata_returns_dict(tmp_path):
+    nc_path = tmp_path / "file.nc"
+    with netCDF4.Dataset(nc_path, "w") as ds:
+        ds.description = "test dataset"
+    meta = load_metadata(str(tmp_path))
+    assert isinstance(meta, dict)
+    assert meta.get("description") == "test dataset"

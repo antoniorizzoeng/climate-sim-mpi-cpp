@@ -1,6 +1,5 @@
 import os
-from typing import List
-
+from typing import List, Dict
 import numpy as np
 import netCDF4
 
@@ -42,3 +41,16 @@ def load_global(base_outputs_dir: str, step: int, var: str = "u") -> np.ndarray:
         data = ds.variables[var][step, :, :]
 
     return np.asarray(data, dtype=float)
+
+
+def load_metadata(base_outputs_dir: str) -> Dict[str, str]:
+    snap_dir = _snapshots_dir(base_outputs_dir)
+    nc_files = [f for f in os.listdir(snap_dir) if f.endswith(".nc")]
+    if not nc_files:
+        raise FileNotFoundError(f"No NetCDF file found in {base_outputs_dir}")
+    nc_path = os.path.join(snap_dir, nc_files[0])
+
+    with netCDF4.Dataset(nc_path, "r") as ds:
+        meta = {attr: getattr(ds, attr) for attr in ds.ncattrs()}
+
+    return meta
