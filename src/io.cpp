@@ -452,14 +452,13 @@ bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec
     count[1] = dec.ny_local;
     count[2] = dec.nx_local;
 
-    std::vector<double> buf((size_t)dec.nx_local * dec.ny_local);
-    for (int j = 0; j < dec.ny_local; ++j) {
-        for (int i = 0; i < dec.nx_local; ++i) {
-            buf[(size_t)j * dec.nx_local + i] = f.at(i + f.halo, j + f.halo);
-        }
-    }
-
-    int status = ncmpi_put_vara_double_all(ncid, varid, start, count, buf.data());
+    // Map the two interior dimensions directly onto rows of the halo-padded field.
+    const MPI_Offset imap[3] = {0, f.nx_total(), 1};
+    const double* interior = f.data.data();
+    if (dec.nx_local > 0 && dec.ny_local > 0)
+        interior = &f.at(f.halo, f.halo);
+    const int status =
+        ncmpi_put_varm_double_all(ncid, varid, start, count, nullptr, imap, interior);
     return collective_status(dec.cart_comm, status) == NC_NOERR;
 }
 

@@ -2,6 +2,10 @@
 
 #include <pnetcdf.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -191,6 +195,17 @@ void ic_gaussian(const Decomp2D& dec, Field& u, const SimConfig& cfg) {
 }
 
 }  // namespace
+
+void initialize_mpi(int& argc, char**& argv) {
+#ifdef _OPENMP
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+    if (provided < MPI_THREAD_FUNNELED)
+        omp_set_num_threads(1);
+#else
+    MPI_Init(&argc, &argv);
+#endif
+}
 
 void apply_initial_condition(const Decomp2D& dec, Field& u, const SimConfig& cfg) {
     if (cfg.ic.mode == "preset") {

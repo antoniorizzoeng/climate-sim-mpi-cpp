@@ -1,5 +1,6 @@
 add_library(core
     init.cpp
+    step.cpp
     field.cpp
     decomp.cpp
     diffusion.cpp
@@ -8,6 +9,22 @@ add_library(core
     io.cpp
     halo.cpp
 )
+
+option(ENABLE_NATIVE_OPTIMIZATIONS "Optimize the simulation kernels for this CPU" OFF)
+if(ENABLE_NATIVE_OPTIMIZATIONS)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-march=native" HAS_MARCH_NATIVE)
+    if(NOT HAS_MARCH_NATIVE)
+        message(FATAL_ERROR "ENABLE_NATIVE_OPTIMIZATIONS requires -march=native support")
+    endif()
+    target_compile_options(core PRIVATE -O3 -march=native)
+endif()
+
+option(ENABLE_OPENMP "Allow OpenMP threads within each MPI rank" OFF)
+if(ENABLE_OPENMP)
+    find_package(OpenMP REQUIRED COMPONENTS CXX)
+    target_link_libraries(core PRIVATE OpenMP::OpenMP_CXX)
+endif()
 
 target_include_directories(core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(core PUBLIC MPI::MPI_CXX yaml-cpp)

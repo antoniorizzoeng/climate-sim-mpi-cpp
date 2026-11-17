@@ -66,3 +66,7 @@ install(FILES
   "${CMAKE_CURRENT_BINARY_DIR}/climate-sim-mpi-cppConfigVersion.cmake"
   DESTINATION lib/cmake/climate-sim-mpi-cpp
 )
+
+# Explicit benchmark target. The regular simulator always writes snapshots.
+add_executable(step_loop_bench EXCLUDE_FROM_ALL benchmarks/step_loop.cpp)
+target_link_libraries(step_loop_bench PRIVATE core)
