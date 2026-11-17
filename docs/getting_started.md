@@ -24,7 +24,7 @@ cmake --build build --parallel
 ## Run a demo
 
 ```bash
-mpirun --oversubscribe -np 4 ./build/src/climate_sim       --config=configs/dev.yaml       --output.format=netcdf
+mpirun --oversubscribe -np 4 ./build/src/climate_sim       --config=configs/dev.yaml
 ```
 
 Suggested **dev.yaml** parameters for a compelling animation (already in repo):
@@ -40,10 +40,62 @@ ic:
   params: { A: 1.0, sigma_frac: 0.06, xc_frac: 0.5, yc_frac: 0.5 }
 ```
 
-### CSV vs NetCDF outputs
+## Run outputs
 
-- **CSV**: human-readable, one file per rank, useful for debugging.  
-- **NetCDF**: structured, one file per snapshot (recommended for production & visualization).  
+Snapshots are stored in one NetCDF file per run, at `outputs/snapshots.nc` by
+default. Set a separate path for each concurrent run. The simulator creates parent
+directories automatically.
+
+```bash
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=configs/dev.yaml \
+  --output=runs/demo/snapshots.nc --progress=runs/demo/progress.json
+```
+
+The equivalent YAML keys are `output.path` and `output.progress`. CLI values
+override the YAML settings. Relative paths resolve from the working directory.
+The existing `output.prefix` setting is stored in the `output_prefix` metadata.
+
+The `u` variable stores frames in `(time, y, x)` order. Frame 0 is the initial
+field. The remaining frames are the states after every `out_every` steps and
+after the last step, which appears exactly once. To recover the simulation step
+for zero-based frame index `i`, use `min(i * out_every, steps)`. Multiply it by
+`dt` for the simulation time. The global attributes `out_every`, `steps`, and
+`dt` store those values, including the effective timestep after stability clamping.
+
+With a progress path configured, rank 0 atomically replaces the JSON file at
+startup, after each frame, and at exit. The fields are `step` (completed steps),
+`steps` (planned steps), `time` (simulation time), `frames` (snapshots written),
+`status` (`running`, `done`, or `error`), and `message` (the error text or an
+empty string). A failed run exits with a non-zero status.
+
+## File initial conditions
+
+Generate a CDF-5 input with the Python dependencies installed.
+
+```bash
+python scripts/generate_ic.py --nx 64 --ny 48 --outfile inputs/start.nc
+```
+
+Save this configuration as `file-ic.yaml`.
+
+```yaml
+ic:
+  mode: file
+  path: inputs/start.nc
+  var: u
+```
+
+```bash
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=file-ic.yaml
+```
+
+You can also set these options with `--ic.mode=file`, `--ic.path`, and `--ic.var`.
+The variable defaults to `u` and must be a two-dimensional float or double field
+in `(y, x)` order. Omitted `nx` and `ny` values come from the file. Explicit
+values must match it. Snapshot 0 in `outputs/snapshots.nc` contains the input field.
+
+PnetCDF supports CDF-1, CDF-2, and CDF-5. Convert NetCDF-4/HDF5 inputs with
+`nccopy -k cdf5 input.nc output.nc`.
 
 ## Visualize
 

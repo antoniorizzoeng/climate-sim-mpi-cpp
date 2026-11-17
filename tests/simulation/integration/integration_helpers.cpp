@@ -14,11 +14,29 @@ inline void nc_check(int status, const char* where) {
     }
 }
 
+TempRunDirectory::TempRunDirectory() {
+    auto pattern = (fs::temp_directory_path() / "climate-sim-test-XXXXXX").string();
+    if (mkdtemp(pattern.data()) == nullptr)
+        throw std::runtime_error("Cannot create integration test directory");
+    path = pattern;
+}
+
+TempRunDirectory::~TempRunDirectory() {
+    std::error_code error;
+    fs::remove_all(path, error);
+}
+
+static std::string shell_quote(const std::string& value) {
+    std::string quoted = "'";
+    for (char c : value) quoted += c == '\'' ? "'\\''" : std::string(1, c);
+    return quoted + "'";
+}
+
 int run_mpi_cmd(const std::string& exe, const std::vector<std::string>& args) {
     std::ostringstream oss;
-    oss << MPIEXEC_EXECUTABLE << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG << " "
-        << INTEGRATION_MPI_PROCS << " " << exe;
-    for (const auto& a : args) oss << " " << a;
+    oss << shell_quote(MPIEXEC_EXECUTABLE) << " " << MPIEXEC_PREFLAGS << " " << MPIEXEC_NUMPROC_FLAG
+        << " " << INTEGRATION_MPI_PROCS << " " << shell_quote(exe);
+    for (const auto& a : args) oss << " " << shell_quote(a);
     std::string cmd = oss.str();
     std::cout << "[MPI CMD] " << cmd << "\n";
     return std::system(cmd.c_str());

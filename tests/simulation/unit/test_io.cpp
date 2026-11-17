@@ -222,7 +222,9 @@ TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
     SimConfig cfg;
     cfg.nx = 8;
     cfg.ny = 16;
-    cfg.dt = 0.123;
+    cfg.dt = 0.0000000123456789;
+    cfg.out_every = 3;
+    cfg.output_prefix = "example";
     cfg.steps = 10;
     cfg.D = 0.01;
     cfg.vx = 1.0;
@@ -254,6 +256,10 @@ TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
 
     EXPECT_EQ(read_text_att("description"), "climate-sim-mpi-cpp");
     EXPECT_EQ(read_text_att("grid"), "8 x 16");
+    EXPECT_DOUBLE_EQ(std::stod(read_text_att("dt")), cfg.dt);
+    EXPECT_EQ(read_text_att("out_every"), "3");
+    EXPECT_EQ(read_text_att("steps"), "10");
+    EXPECT_EQ(read_text_att("output_prefix"), "example");
     EXPECT_EQ(read_text_att("boundary_conditions"),
               "left=dirichlet right=neumann bottom=periodic top=dirichlet");
 
@@ -262,4 +268,44 @@ TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
     std::remove(fname.c_str());
 
     MPI_Finalize();
+}
+TEST(Unit_IO_CLI, BoundaryOverridesBothForms) {
+    std::vector<std::string> args = {"--bc.left=neumann",
+                                     "--bc.right",
+                                     "periodic",
+                                     "--bc.bottom=neumann",
+                                     "--bc.top",
+                                     "periodic"};
+    SimConfig cfg = merged_config(std::nullopt, args);
+    EXPECT_EQ(cfg.bc.left, BCType::Neumann);
+    EXPECT_EQ(cfg.bc.right, BCType::Periodic);
+    EXPECT_EQ(cfg.bc.bottom, BCType::Neumann);
+    EXPECT_EQ(cfg.bc.top, BCType::Periodic);
+
+    std::vector<std::string> args2 = {"--bc.left",
+                                      "periodic",
+                                      "--bc.right=neumann",
+                                      "--bc.bottom",
+                                      "periodic",
+                                      "--bc.top=neumann"};
+    SimConfig cfg2 = merged_config(std::nullopt, args2);
+    EXPECT_EQ(cfg2.bc.left, BCType::Periodic);
+    EXPECT_EQ(cfg2.bc.right, BCType::Neumann);
+    EXPECT_EQ(cfg2.bc.bottom, BCType::Periodic);
+    EXPECT_EQ(cfg2.bc.top, BCType::Neumann);
+}
+
+TEST(Unit_IO_Config, ValidateRejectsBadValues) {
+    auto expect_invalid = [](auto mutate) {
+        SimConfig cfg;
+        mutate(cfg);
+        EXPECT_THROW(cfg.validate(), std::runtime_error);
+    };
+    expect_invalid([](SimConfig& c) { c.dx = 0.0; });
+    expect_invalid([](SimConfig& c) { c.steps = 0; });
+    expect_invalid([](SimConfig& c) { c.out_every = 0; });
+    expect_invalid([](SimConfig& c) { c.output_path.clear(); });
+    expect_invalid([](SimConfig& c) { c.progress_path = std::string(); });
+    SimConfig ok;
+    EXPECT_NO_THROW(ok.validate());
 }

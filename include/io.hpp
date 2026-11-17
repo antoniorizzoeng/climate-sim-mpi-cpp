@@ -15,11 +15,12 @@ struct ICConfig {
     double xc_frac = 0.5;
     double yc_frac = 0.5;
     std::string path;
-    std::string var;
+    std::string var = "u";
 };
 
 struct SimConfig {
     int nx = 256, ny = 256;
+    bool nx_explicit = false, ny_explicit = false;
     double dx = 1.0, dy = 1.0;
 
     double D = 0.0;
@@ -32,6 +33,8 @@ struct SimConfig {
     BCConfig bc;
 
     std::string output_prefix = "snap";
+    std::string output_path = "outputs/snapshots.nc";
+    std::optional<std::string> progress_path;
 
     ICConfig ic{};
 
@@ -49,7 +52,7 @@ struct CLIOverrides {
 
     std::optional<BCType> bc_left, bc_right, bc_bottom, bc_top;
 
-    std::optional<std::string> output_prefix;
+    std::optional<std::string> output_prefix, output_path, progress_path;
 
     struct {
         std::optional<std::string> mode, preset, path, format, var;
@@ -62,7 +65,8 @@ SimConfig load_yaml_file(const std::string& path);
 CLIOverrides parse_cli_overrides(const std::vector<std::string>& args);
 
 SimConfig merged_config(const std::optional<std::string>& yaml_path,
-                        const std::vector<std::string>& cli_args);
+                        const std::vector<std::string>& cli_args,
+                        std::optional<std::string>* configured_progress = nullptr);
 
 BCType bc_from_string(const std::string& s);
 std::string bc_to_string(BCType bc);
@@ -76,6 +80,6 @@ int open_netcdf_parallel(const std::string& filename,
 
 bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step);
 
-void close_netcdf_parallel(int ncid);
+void close_netcdf_parallel(int ncid, MPI_Comm comm = MPI_COMM_NULL);
 
 void write_metadata_netcdf(int ncid, const SimConfig& cfg);

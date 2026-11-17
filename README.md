@@ -22,7 +22,7 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - Initial conditions:
   - Constant zero
   - Gaussian hotspot
-  - NetCDF i/o
+  - NetCDF fields read in parallel with PnetCDF (CDF-1, CDF-2, CDF-5)
 - Configurable via YAML and CLI overrides.
 - Timing statistics logged at end of run.
 
@@ -58,6 +58,16 @@ Run simulation (example, 4 MPI ranks):
 ```bash
 mpirun --oversubscribe -np 4 ./src/climate_sim --config=configs/dev.yaml
 ```
+
+Start from a NetCDF field with `--ic.mode=file --ic.path=inputs/ic_global.nc`.
+The variable defaults to `u` and can be set with `--ic.var`. Omit `nx` or `ny`
+to use the corresponding file dimension. See the [file initial conditions guide](docs/getting_started.md#file-initial-conditions).
+
+Use `--output=runs/demo/snapshots.nc` to give a run its own snapshot file and
+`--progress=runs/demo/progress.json` to track its status. The default snapshot
+file is `outputs/snapshots.nc`. Each file includes the initial and final states.
+See [run outputs](docs/getting_started.md#run-outputs) for the YAML settings and
+frame timing.
 
 ### Python (visualization)
 Install dependencies with:

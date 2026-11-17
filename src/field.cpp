@@ -9,7 +9,7 @@ Field::Field(int nx, int ny, int h, double dx_, double dy_)
       halo(h),
       dx(dx_),
       dy(dy_),
-      data(static_cast<size_t>((nx + 2 * h) * (ny + 2 * h)), 0.0) {}
+      data(static_cast<size_t>(nx + 2 * h) * (ny + 2 * h), 0.0) {}
 
 inline static void check_bounds(int i, int j, int nx_tot, int ny_tot) {
     if (i < 0 || j < 0 || i >= nx_tot || j >= ny_tot) {
