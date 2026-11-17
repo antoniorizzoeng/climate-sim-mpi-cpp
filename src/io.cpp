@@ -4,6 +4,7 @@
 #include <pnetcdf.h>
 #include <yaml-cpp/yaml.h>
 
+#include <iostream>
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
