@@ -222,7 +222,9 @@ TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
     SimConfig cfg;
     cfg.nx = 8;
     cfg.ny = 16;
-    cfg.dt = 0.123;
+    cfg.dt = 0.0000000123456789;
+    cfg.out_every = 3;
+    cfg.output_prefix = "example";
     cfg.steps = 10;
     cfg.D = 0.01;
     cfg.vx = 1.0;
@@ -254,6 +256,10 @@ TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
 
     EXPECT_EQ(read_text_att("description"), "climate-sim-mpi-cpp");
     EXPECT_EQ(read_text_att("grid"), "8 x 16");
+    EXPECT_DOUBLE_EQ(std::stod(read_text_att("dt")), cfg.dt);
+    EXPECT_EQ(read_text_att("out_every"), "3");
+    EXPECT_EQ(read_text_att("steps"), "10");
+    EXPECT_EQ(read_text_att("output_prefix"), "example");
     EXPECT_EQ(read_text_att("boundary_conditions"),
               "left=dirichlet right=neumann bottom=periodic top=dirichlet");
 

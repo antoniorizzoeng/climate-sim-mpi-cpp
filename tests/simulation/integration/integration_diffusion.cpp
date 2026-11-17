@@ -3,7 +3,8 @@
 #include "integration_helpers.hpp"
 
 TEST(Integration, Diffusion_DecreasesPeak) {
-    fs::remove_all("outputs");
+    const TempRunDirectory dir;
+    const auto snapshot = dir.path / "new/nested/snapshots.nc";
 
     std::vector<std::string> args = {"--nx=64",
                                      "--ny=64",
@@ -20,13 +21,13 @@ TEST(Integration, Diffusion_DecreasesPeak) {
                                      "--ic.preset=gaussian_hotspot",
                                      "--ic.A=1.0",
                                      "--ic.sigma_frac=0.1"};
+    args.push_back("--output=" + snapshot.string());
     ASSERT_EQ(run_mpi_cmd(CLIMATE_SIM_EXE, args), 0);
 
-    fs::path simfile = "outputs/snapshots.nc";
-    ASSERT_TRUE(fs::exists(simfile));
+    ASSERT_TRUE(fs::exists(snapshot));
 
-    auto U0 = read_nc_2d(simfile, 0, "u");
-    auto U10 = read_nc_2d(simfile, 9, "u");
+    auto U0 = read_nc_2d(snapshot, 0, "u");
+    auto U10 = read_nc_2d(snapshot, 10, "u");
 
     ASSERT_EQ(U0.size(), 64u);
     ASSERT_EQ(U0[0].size(), 64u);
