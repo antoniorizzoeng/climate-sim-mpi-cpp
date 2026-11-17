@@ -20,7 +20,7 @@ def make_gaussian_ic(Nx=256, Ny=512, dx=1.0, dy=1.0,
 def write_netcdf(U, out_path, dx=1.0, dy=1.0, var="u"):
     Ny, Nx = U.shape
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with Dataset(out_path, "w", format="NETCDF4") as nc:
+    with Dataset(out_path, "w", format="NETCDF3_64BIT_DATA") as nc:
         nc.createDimension("x", Nx)
         nc.createDimension("y", Ny)
 
@@ -59,6 +59,8 @@ if __name__ == "__main__":
     U = make_gaussian_ic(args.nx, args.ny, args.dx, args.dy,
                          args.amp, args.sigma_frac, args.xc_frac, args.yc_frac)
 
-    out_path = os.path.join(args.outdir, "ic_global.nc")
+    out_path = args.outfile or os.path.join(args.outdir, "ic_global.nc")
+    if not os.path.splitext(out_path)[1]:
+        out_path += ".nc"
 
     write_netcdf(U, out_path, args.dx, args.dy, var=args.var)

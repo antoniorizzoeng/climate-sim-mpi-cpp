@@ -85,18 +85,13 @@ SimConfig load_yaml_file(const std::string& path) {
     SimConfig cfg;
     YAML::Node root = YAML::LoadFile(path);
 
-    if (root["grid"]) {
-        auto g = root["grid"];
-        assign_if(g, "nx", cfg.nx);
-        assign_if(g, "ny", cfg.ny);
-        assign_if(g, "dx", cfg.dx);
-        assign_if(g, "dy", cfg.dy);
-    } else {
-        assign_if(root, "nx", cfg.nx);
-        assign_if(root, "ny", cfg.ny);
-        assign_if(root, "dx", cfg.dx);
-        assign_if(root, "dy", cfg.dy);
-    }
+    const auto grid = root["grid"] ? root["grid"] : root;
+    cfg.nx_explicit = grid["nx"].IsDefined();
+    cfg.ny_explicit = grid["ny"].IsDefined();
+    assign_if(grid, "nx", cfg.nx);
+    assign_if(grid, "ny", cfg.ny);
+    assign_if(grid, "dx", cfg.dx);
+    assign_if(grid, "dy", cfg.dy);
 
     if (root["physics"]) {
         auto p = root["physics"];
@@ -309,10 +304,14 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
 }
 
 static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
-    if (o.nx)
+    if (o.nx) {
         base.nx = *o.nx;
-    if (o.ny)
+        base.nx_explicit = true;
+    }
+    if (o.ny) {
         base.ny = *o.ny;
+        base.ny_explicit = true;
+    }
     if (o.dx)
         base.dx = *o.dx;
     if (o.dy)
@@ -358,6 +357,8 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
         base.ic.yc_frac = *o.ic.yc_frac;
     if (o.ic.path)
         base.ic.path = *o.ic.path;
+    if (o.ic.var)
+        base.ic.var = *o.ic.var;
 }
 
 SimConfig merged_config(const std::optional<std::string>& yaml_path,

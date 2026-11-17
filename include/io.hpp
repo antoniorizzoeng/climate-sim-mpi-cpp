@@ -15,11 +15,12 @@ struct ICConfig {
     double xc_frac = 0.5;
     double yc_frac = 0.5;
     std::string path;
-    std::string var;
+    std::string var = "u";
 };
 
 struct SimConfig {
     int nx = 256, ny = 256;
+    bool nx_explicit = false, ny_explicit = false;
     double dx = 1.0, dy = 1.0;
 
     double D = 0.0;
