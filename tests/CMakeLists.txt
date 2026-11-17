@@ -129,3 +129,6 @@ add_it(integration_diffusion         simulation/integration/integration_diffusio
 add_it(integration_advection         simulation/integration/integration_advection.cpp)
 add_it(integration_boundary_error    simulation/integration/integration_boundary_error.cpp)
 add_it(integration_ic                simulation/integration/integration_ic.cpp)
+add_executable(integration_ic_file simulation/integration/integration_ic_file.cpp)
+target_link_libraries(integration_ic_file PRIVATE integration_helpers GTest::gtest_main)
+gtest_discover_tests(integration_ic_file DISCOVERY_TIMEOUT 60 PROPERTIES TIMEOUT 30)

@@ -37,7 +37,23 @@ int main(int argc, char** argv) {
             cfg_path = args[i + 1];
     }
 
-    SimConfig cfg = merged_config(cfg_path, args);
+    SimConfig cfg;
+    Decomp2D dec;
+    std::optional<Field> initial;
+    try {
+        cfg = merged_config(cfg_path, args);
+        initial.emplace(initialize_field(MPI_COMM_WORLD, dec, cfg));
+    } catch (const std::exception& e) {
+        if (world_rank == 0) {
+            std::string message = e.what();
+            std::replace(message.begin(), message.end(), '\n', ' ');
+            std::replace(message.begin(), message.end(), '\r', ' ');
+            std::cerr << "[error] " << message << "\n";
+        }
+        dec.finalize();
+        MPI_Finalize();
+        return 1;
+    }
 
     double dt_limit = safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
     if (cfg.dt > dt_limit) {
@@ -59,16 +75,8 @@ int main(int argc, char** argv) {
                   << " top=" << bc_to_string(cfg.bc.top) << "\n";
     }
 
-    Decomp2D dec;
-    dec.init(MPI_COMM_WORLD, cfg.nx, cfg.ny);
-
-    const int halo = 1;
-    Field u(dec.nx_local, dec.ny_local, halo, cfg.dx, cfg.dy);
-    Field tmp(dec.nx_local, dec.ny_local, halo, cfg.dx, cfg.dy);
-    u.fill(0.0);
-    tmp.fill(0.0);
-
-    apply_initial_condition(dec, u, cfg);
+    Field& u = *initial;
+    Field tmp(dec.nx_local, dec.ny_local, u.halo, cfg.dx, cfg.dy);
 
     if (world_rank == 0) {
         double mn = *std::min_element(u.data.begin(), u.data.end());

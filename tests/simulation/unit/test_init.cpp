@@ -91,5 +91,8 @@ TEST(Unit_Init_IC, FileMissingThrows) {
     cfg.ic.mode = "file";
     cfg.ic.path = "definitely_missing.nc";
 
+    MPI_Init(nullptr, nullptr);
+    dec.cart_comm = MPI_COMM_SELF;
     EXPECT_THROW(apply_initial_condition(dec, u, cfg), std::runtime_error);
+    MPI_Finalize();
 }
