@@ -18,6 +18,16 @@ namespace fs = std::filesystem;
 #define INTEGRATION_MPI_PROCS 4
 #endif
 
+class TempRunDirectory {
+   public:
+    TempRunDirectory();
+    ~TempRunDirectory();
+    TempRunDirectory(const TempRunDirectory&) = delete;
+    TempRunDirectory& operator=(const TempRunDirectory&) = delete;
+
+    fs::path path;
+};
+
 int run_mpi_cmd(const std::string& exe, const std::vector<std::string>& args);
 std::vector<std::vector<double>> read_nc_2d(const fs::path& file, int step, const char* var);
 double sum2d(const std::vector<std::vector<double>>& A);

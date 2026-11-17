@@ -63,6 +63,12 @@ Start from a NetCDF field with `--ic.mode=file --ic.path=inputs/ic_global.nc`.
 The variable defaults to `u` and can be set with `--ic.var`. Omit `nx` or `ny`
 to use the corresponding file dimension. See the [file initial conditions guide](docs/getting_started.md#file-initial-conditions).
 
+Use `--output=runs/demo/snapshots.nc` to give a run its own snapshot file and
+`--progress=runs/demo/progress.json` to track its status. The default snapshot
+file is `outputs/snapshots.nc`. Each file includes the initial and final states.
+See [run outputs](docs/getting_started.md#run-outputs) for the YAML settings and
+frame timing.
+
 ### Python (visualization)
 Install dependencies with:
 

@@ -6,17 +6,15 @@
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
-#include <fstream>
+#include <cmath>
 #include <iomanip>
-#include <iostream>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <stdexcept>
 
 #include "boundary.hpp"
 #include "field.hpp"
-namespace fs = std::filesystem;
 
 namespace {
 inline void ncmpi_check(int status, const char* where) {
@@ -25,6 +23,13 @@ inline void ncmpi_check(int status, const char* where) {
         oss << where << ": " << ncmpi_strerror(status);
         throw std::runtime_error(oss.str());
     }
+}
+int collective_status(MPI_Comm comm, int status) {
+    if (comm == MPI_COMM_NULL)
+        return status;
+    int result;
+    MPI_Allreduce(&status, &result, 1, MPI_INT, MPI_MIN, comm);
+    return result;
 }
 }  // namespace
 
@@ -61,12 +66,16 @@ void SimConfig::validate() const {
         throw std::runtime_error("nx/ny must be > 0");
     if (dx <= 0 || dy <= 0)
         throw std::runtime_error("dx/dy must be > 0");
-    if (dt <= 0)
+    if (!std::isfinite(dt) || dt <= 0)
         throw std::runtime_error("dt must be > 0");
     if (steps <= 0)
         throw std::runtime_error("steps must be > 0");
     if (out_every < 1)
         throw std::runtime_error("out_every must be >= 1");
+    if (output_path.empty())
+        throw std::runtime_error("output.path must not be empty");
+    if (progress_path && progress_path->empty())
+        throw std::runtime_error("output.progress must not be empty");
 }
 
 static void assign_if(const YAML::Node& n, const char* key, int& x) {
@@ -82,9 +91,22 @@ static void assign_if(const YAML::Node& n, const char* key, std::string& x) {
         x = n[key].as<std::string>();
 }
 
-SimConfig load_yaml_file(const std::string& path) {
+static SimConfig read_yaml_file(const std::string& path,
+                                std::optional<std::string>* configured_progress) {
     SimConfig cfg;
     YAML::Node root = YAML::LoadFile(path);
+
+    if (const auto output = root["output"]) {
+        if (output["progress"]) {
+            cfg.progress_path = output["progress"].as<std::string>();
+            if (configured_progress && !*configured_progress)
+                *configured_progress = cfg.progress_path;
+        }
+        assign_if(output, "path", cfg.output_path);
+        assign_if(output, "prefix", cfg.output_prefix);
+    } else {
+        assign_if(root, "output_prefix", cfg.output_prefix);
+    }
 
     const auto grid = root["grid"] ? root["grid"] : root;
     cfg.nx_explicit = grid["nx"].IsDefined();
@@ -135,13 +157,6 @@ SimConfig load_yaml_file(const std::string& path) {
         }
     }
 
-    if (root["output"]) {
-        auto o = root["output"];
-        assign_if(o, "prefix", cfg.output_prefix);
-    } else {
-        assign_if(root, "output_prefix", cfg.output_prefix);
-    }
-
     if (root["ic"]) {
         auto ic = root["ic"];
         if (ic["mode"])
@@ -162,6 +177,11 @@ SimConfig load_yaml_file(const std::string& path) {
             cfg.ic.var = ic["var"].as<std::string>();
     }
 
+    return cfg;
+}
+
+SimConfig load_yaml_file(const std::string& path) {
+    SimConfig cfg = read_yaml_file(path, nullptr);
     cfg.validate();
     return cfg;
 }
@@ -170,6 +190,16 @@ static bool starts_with(const std::string& s, const std::string& p) { return s.r
 static std::optional<std::string> get_value(const std::string& arg, const std::string& key) {
     if (starts_with(arg, "--" + key + "="))
         return arg.substr(key.size() + 3);
+    return std::nullopt;
+}
+
+static std::optional<std::string> cli_string(const std::vector<std::string>& args,
+                                             const char* key,
+                                             size_t i) {
+    if (auto value = get_value(args[i], key))
+        return value;
+    if (args[i] == std::string("--") + key && i + 1 < args.size())
+        return args[i + 1];
     return std::nullopt;
 }
 
@@ -199,18 +229,13 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
             }
             return false;
         };
-    auto try_set_str =
-        [&](const std::string& a, const char* k, std::optional<std::string>& dst, size_t i) {
-            if (auto v = get_value(a, k)) {
-                dst = *v;
-                return true;
-            }
-            if (a == std::string("--") + k && i + 1 < args.size()) {
-                dst = args[i + 1];
-                return true;
-            }
-            return false;
-        };
+    auto try_set_str = [&](const char* k, std::optional<std::string>& dst, size_t i) {
+        if (auto value = cli_string(args, k, i)) {
+            dst = std::move(value);
+            return true;
+        }
+        return false;
+    };
 
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
@@ -279,14 +304,18 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
             continue;
         }
 
-        if (try_set_str(a, "output.prefix", o.output_prefix, i))
+        if (try_set_str("output", o.output_path, i))
             continue;
-        if (try_set_str(a, "output_prefix", o.output_prefix, i))
+        if (try_set_str("progress", o.progress_path, i))
+            continue;
+        if (try_set_str("output.prefix", o.output_prefix, i))
+            continue;
+        if (try_set_str("output_prefix", o.output_prefix, i))
             continue;
 
-        if (try_set_str(a, "ic.mode", o.ic.mode, i))
+        if (try_set_str("ic.mode", o.ic.mode, i))
             continue;
-        if (try_set_str(a, "ic.preset", o.ic.preset, i))
+        if (try_set_str("ic.preset", o.ic.preset, i))
             continue;
         if (try_set_dbl(a, "ic.A", o.ic.A, i))
             continue;
@@ -296,9 +325,9 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
             continue;
         if (try_set_dbl(a, "ic.yc_frac", o.ic.yc_frac, i))
             continue;
-        if (try_set_str(a, "ic.path", o.ic.path, i))
+        if (try_set_str("ic.path", o.ic.path, i))
             continue;
-        if (try_set_str(a, "ic.var", o.ic.var, i))
+        if (try_set_str("ic.var", o.ic.var, i))
             continue;
     }
     return o;
@@ -343,6 +372,10 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
 
     if (o.output_prefix)
         base.output_prefix = *o.output_prefix;
+    if (o.output_path)
+        base.output_path = *o.output_path;
+    if (o.progress_path)
+        base.progress_path = o.progress_path;
 
     if (o.ic.mode)
         base.ic.mode = *o.ic.mode;
@@ -363,11 +396,20 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
 }
 
 SimConfig merged_config(const std::optional<std::string>& yaml_path,
-                        const std::vector<std::string>& cli_args) {
+                        const std::vector<std::string>& cli_args,
+                        std::optional<std::string>* configured_progress) {
+    // Capture the destination before any unrelated option can fail to parse.
+    if (configured_progress) {
+        configured_progress->reset();
+        for (size_t i = 0; i < cli_args.size(); ++i) {
+            if (auto path = cli_string(cli_args, "progress", i))
+                *configured_progress = std::move(path);
+        }
+    }
     SimConfig cfg;
 
     if (yaml_path && !yaml_path->empty()) {
-        cfg = load_yaml_file(*yaml_path);
+        cfg = read_yaml_file(*yaml_path, configured_progress);
     }
 
     CLIOverrides cli = parse_cli_overrides(cli_args);
@@ -386,7 +428,7 @@ int open_netcdf_parallel(const std::string& filename,
     int dim_time, dim_y, dim_x;
     int status =
         ncmpi_create(comm, filename.c_str(), NC_CLOBBER | NC_64BIT_DATA, MPI_INFO_NULL, &ncid);
-    ncmpi_check(status, "ncmpi_create");
+    ncmpi_check(collective_status(comm, status), "ncmpi_create");
 
     ncmpi_check(ncmpi_def_dim(ncid, "time", NC_UNLIMITED, &dim_time), "def_dim time");
     ncmpi_check(ncmpi_def_dim(ncid, "y", dec.ny_global, &dim_y), "def_dim y");
@@ -397,7 +439,7 @@ int open_netcdf_parallel(const std::string& filename,
 
     write_metadata_netcdf(ncid, cfg);
 
-    ncmpi_check(ncmpi_enddef(ncid), "enddef");
+    ncmpi_check(collective_status(comm, ncmpi_enddef(ncid)), "enddef");
     return NC_NOERR;
 }
 
@@ -418,29 +460,27 @@ bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec
     }
 
     int status = ncmpi_put_vara_double_all(ncid, varid, start, count, buf.data());
-    if (status != NC_NOERR) {
-        std::cerr << "Rank write failed: " << ncmpi_strerror(status) << "\n";
-        return false;
-    }
-    return true;
+    return collective_status(dec.cart_comm, status) == NC_NOERR;
 }
 
-void close_netcdf_parallel(int ncid) { ncmpi_close(ncid); }
+void close_netcdf_parallel(int ncid, MPI_Comm comm) {
+    ncmpi_check(collective_status(comm, ncmpi_close(ncid)), "ncmpi_close");
+}
 
 void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
-    int status;
-
     auto put_attr = [&](const char* name, const std::string& value) {
-        status = ncmpi_put_att_text(ncid, NC_GLOBAL, name, value.size(), value.c_str());
-        if (status != NC_NOERR) {
-            std::cerr << "Error writing attribute " << name << ": " << ncmpi_strerror(status)
-                      << "\n";
-        }
+        ncmpi_check(ncmpi_put_att_text(ncid, NC_GLOBAL, name, value.size(), value.c_str()), name);
     };
+
+    std::ostringstream dt;
+    dt.imbue(std::locale::classic());
+    dt << std::setprecision(std::numeric_limits<double>::max_digits10) << cfg.dt;
 
     put_attr("description", "climate-sim-mpi-cpp");
     put_attr("grid", std::to_string(cfg.nx) + " x " + std::to_string(cfg.ny));
-    put_attr("dt", std::to_string(cfg.dt));
+    put_attr("dt", dt.str());
+    put_attr("out_every", std::to_string(cfg.out_every));
+    put_attr("output_prefix", cfg.output_prefix);
     put_attr("steps", std::to_string(cfg.steps));
     put_attr("D", std::to_string(cfg.D));
     put_attr("velocity", "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) + ")");

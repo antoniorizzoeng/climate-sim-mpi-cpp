@@ -3,7 +3,8 @@
 #include "integration_helpers.hpp"
 
 TEST(Integration, IC_LoadsCorrectMinMax) {
-    fs::remove_all("outputs");
+    const TempRunDirectory dir;
+    const auto snapshot = dir.path / "new/nested/snapshots.nc";
 
     std::vector<std::string> args = {"--nx=64",
                                      "--ny=32",
@@ -20,12 +21,12 @@ TEST(Integration, IC_LoadsCorrectMinMax) {
                                      "--ic.preset=gaussian_hotspot",
                                      "--ic.A=1.0",
                                      "--ic.sigma_frac=0.1"};
+    args.push_back("--output=" + snapshot.string());
     ASSERT_EQ(run_mpi_cmd(CLIMATE_SIM_EXE, args), 0);
 
-    fs::path simfile = "outputs/snapshots.nc";
-    ASSERT_TRUE(fs::exists(simfile));
+    ASSERT_TRUE(fs::exists(snapshot));
 
-    auto full = read_nc_2d(simfile, 0, "u");
+    auto full = read_nc_2d(snapshot, 0, "u");
     ASSERT_EQ(full.size(), 32u);
     ASSERT_EQ(full[0].size(), 64u);
 
