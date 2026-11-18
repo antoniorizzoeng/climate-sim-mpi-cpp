@@ -19,6 +19,16 @@ namespace {
 
 using namespace netcdf_input;
 
+// With stable weights the field stays within its initial range. Leave headroom
+// for opposite-sign differences, their weighted sum and rounding at the CFL limit.
+void check_amplitude(double maximum) {
+    if (!std::isfinite(maximum))
+        throw std::runtime_error("Initial condition variable contains non-finite values.");
+    if (maximum > std::numeric_limits<double>::max() / 4)
+        throw std::runtime_error(
+            "Initial condition magnitude exceeds the stencil limit (DBL_MAX/4).");
+}
+
 class InitialConditionFile : private ParallelInputFile {
    public:
     InitialConditionFile(MPI_Comm comm, const ICConfig& cfg)
@@ -125,12 +135,16 @@ class InitialConditionFile : private ParallelInputFile {
             ncmpi_get_vara_double_all(ncid_, varid_, start + offset, count + offset, local.data());
         check_netcdf(collective_status(comm_, status), "Cannot read initial condition data");
 
-        const int non_finite = std::any_of(
-            local.begin(), local.end(), [](double value) { return !std::isfinite(value); });
-        int any_non_finite;
-        MPI_Allreduce(&non_finite, &any_non_finite, 1, MPI_INT, MPI_MAX, comm_);
-        if (any_non_finite)
-            throw std::runtime_error("Initial condition variable contains non-finite values.");
+        double maximum = 0;
+        for (double value : local) {
+            if (!std::isfinite(value)) {
+                maximum = std::numeric_limits<double>::infinity();
+                break;
+            }
+            maximum = std::max(maximum, std::abs(value));
+        }
+        MPI_Allreduce(MPI_IN_PLACE, &maximum, 1, MPI_DOUBLE, MPI_MAX, comm_);
+        check_amplitude(maximum);
 
         for (int k = 0; k < dec.nz_local; ++k)
             for (int j = 0; j < dec.ny_local; ++j) {
@@ -156,21 +170,34 @@ void ic_gaussian(const Decomposition& dec, Field& u, const SimConfig& cfg) {
     const double xc = cfg.ic.xc_frac * Lx;
     const double yc = cfg.ic.yc_frac * Ly;
     const double Lz = cfg.nz * cfg.dz;
-    const double sig = cfg.ic.sigma_frac * (cfg.nz > 1 ? std::min({Lx, Ly, Lz}) : std::min(Lx, Ly));
-    for (int k = 0; k < u.nz_local; ++k) {
-        const double z =
-            cfg.nz > 1 ? ((dec.z_offset + k + 0.5) * cfg.dz - cfg.ic.zc_frac * Lz) : 0.0;
+    const double length = cfg.nz > 1 ? std::min({Lx, Ly, Lz}) : std::min(Lx, Ly);
+    const double sig = cfg.ic.sigma_frac * length;
+    const double variance = 2.0 * sig * sig;
+    check_amplitude(std::abs(cfg.ic.A));
+    auto fill = [&](auto squared_width) {
+        using Real = decltype(squared_width);
+        for (int k = 0; k < u.nz_local; ++k) {
+            const double z =
+                cfg.nz > 1 ? ((dec.z_offset + k + 0.5) * cfg.dz - cfg.ic.zc_frac * Lz) : 0.0;
 
-        for (int j = h; j < h + ny; ++j) {
-            const int gj = dec.y_offset + (j - h);
-            const double y = (gj + 0.5) * cfg.dy;
-            for (int i = h; i < h + nx; ++i) {
-                const int gi = dec.x_offset + (i - h);
-                const double x = (gi + 0.5) * cfg.dx;
-                const double r2 = (x - xc) * (x - xc) + (y - yc) * (y - yc);
-                u.at(i, j, k + u.z_halo) = cfg.ic.A * std::exp(-(r2 + z * z) / (2.0 * sig * sig));
+            for (int j = h; j < h + ny; ++j) {
+                const int gj = dec.y_offset + (j - h);
+                const double y = (gj + 0.5) * cfg.dy;
+                for (int i = h; i < h + nx; ++i) {
+                    const int gi = dec.x_offset + (i - h);
+                    const double x = (gi + 0.5) * cfg.dx;
+                    const Real rx = x - xc, ry = y - yc, rz = z;
+                    const Real r2 = rx * rx + ry * ry + rz * rz;
+                    u.at(i, j, k + u.z_halo) = cfg.ic.A * std::exp(-r2 / squared_width);
+                }
             }
         }
+    };
+    if (variance < std::numeric_limits<double>::min()) {
+        const long double wide_sig = static_cast<long double>(cfg.ic.sigma_frac) * length;
+        fill(2 * wide_sig * wide_sig);
+    } else {
+        fill(variance);
     }
 }
 
@@ -228,8 +255,6 @@ Field initialize_field(MPI_Comm comm, Decomposition& dec, SimConfig& cfg) {
              cfg.bc.left == BCType::Periodic,
              cfg.bc.bottom == BCType::Periodic,
              cfg.bc.front == BCType::Periodic);
-    if (file && (cfg.nx < dec.dims[0] || cfg.ny < dec.dims[1]))
-        throw std::runtime_error("Initial condition grid is too small for the MPI decomposition.");
 
     Field u(dec, 1, cfg.dx, cfg.dy, cfg.dz);
     if (file)

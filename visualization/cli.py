@@ -1,6 +1,6 @@
 import argparse
 from typing import Optional, Sequence
-from .io import load_global, list_available_steps, load_metadata
+from .io import load_global, list_available_steps, load_metadata, simulation_step
 from .plots import imshow_field, compare_fields, animate_from_outputs
 
 
@@ -22,17 +22,17 @@ def cmd_show(args: argparse.Namespace) -> None:
         raise SystemExit(f"No snapshots found in {args.dir}/snapshots")
     step = args.step if args.step is not None else steps[-1]
     U = load_global(args.dir, step, var=args.var)
-    meta = load_metadata(args.dir) if args.show_meta else None
+    meta = load_metadata(args.dir)
     imshow_field(
         U,
-        title=args.title or f"{args.dir} :: step {step}",
+        title=args.title or f"{args.dir} :: step {simulation_step(step, meta)}",
         cmap=args.cmap,
         vmin=args.vmin,
         vmax=args.vmax,
         show=args.show,
         save=args.save,
         overlay_minmax=args.overlay_minmax,
-        metadata=meta,
+        metadata=meta if args.show_meta else None,
     )
 
 

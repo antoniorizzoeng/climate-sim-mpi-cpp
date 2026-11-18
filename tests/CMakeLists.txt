@@ -141,6 +141,13 @@ add_executable(integration_ic_file simulation/integration/integration_ic_file.cp
 target_link_libraries(integration_ic_file PRIVATE integration_helpers GTest::gtest_main)
 gtest_discover_tests(integration_ic_file DISCOVERY_TIMEOUT 60 PROPERTIES TIMEOUT 30)
 
+foreach(case combined_stability thin_neumann transport_metadata tiny_spacing extreme_amplitude)
+  add_test(NAME Plane.${case}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/plane.py
+            Plane.test_${case} cpu $<TARGET_FILE:climate_sim> ${MPIEXEC_NUMPROC_FLAG}
+            ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
+endforeach()
+
 foreach(case uniform shear interpolation stability bad_dimensions empty_tiles input_protection)
   add_test(NAME FileWind.${case}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/file_wind.py
@@ -160,6 +167,11 @@ foreach(case reference vertical_diffusion surplus_ranks file_wind steady_wind ge
 endforeach()
 
 if(ENABLE_KOKKOS)
+  add_test(NAME Kokkos.UniformPlane
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/plane.py
+            Plane kokkos $<TARGET_FILE:climate_sim> ${MPIEXEC_NUMPROC_FLAG}
+            ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
+
   foreach(ranks RANGE 1 4)
     add_test(NAME Kokkos.NativeParity_${ranks}_ranks
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/kokkos.py

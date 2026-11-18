@@ -5,15 +5,14 @@
 
 namespace stencil_math {
 // Unusual spacings can overflow or underflow a double intermediate even when
-// the normalized coefficient is finite. Preserve the original 2D uniform path.
-template <bool robust>
+// the normalized coefficient is finite.
 inline double diffusion(double dt, double diffusivity, double spacing) {
+    if (diffusivity == 0)
+        return 0;
     const double numerator = dt * diffusivity, square = spacing * spacing;
-    if constexpr (robust) {
-        if (!std::isnormal(square) || (diffusivity != 0 && !std::isnormal(numerator)))
-            return static_cast<double>((static_cast<long double>(dt) * diffusivity / spacing) /
-                                       spacing);
-    }
+    if (!std::isnormal(square) || !std::isnormal(numerator))
+        return static_cast<double>((static_cast<long double>(dt) * diffusivity / spacing) /
+                                   spacing);
     return numerator / square;
 }
 

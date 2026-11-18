@@ -565,11 +565,13 @@ void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
         put_attr("dz", precise(cfg.dz));
         put_attr("Dz", precise(cfg.vertical_diffusion()));
     }
+    put_attr("dx", precise(cfg.dx));
+    put_attr("dy", precise(cfg.dy));
     put_attr("dt", precise(cfg.dt));
     put_attr("out_every", std::to_string(cfg.out_every));
     put_attr("output_prefix", cfg.output_prefix);
     put_attr("steps", std::to_string(cfg.steps));
-    put_attr("D", std::to_string(cfg.D));
+    put_attr("D", precise(cfg.D));
     put_attr("wind_mode", cfg.wind.mode);
     if (cfg.wind.mode == "file") {
         put_attr("wind_path", cfg.wind.path);
@@ -581,8 +583,8 @@ void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
         put_attr("velocity", "file");
     } else
         put_attr("velocity",
-                 "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) +
-                     (volume ? "," + std::to_string(cfg.vz) : "") + ")");
+                 "(" + precise(cfg.vx) + "," + precise(cfg.vy) +
+                     (volume ? "," + precise(cfg.vz) : "") + ")");
     put_attr(
         "boundary_conditions",
         "left=" + bc_to_string(cfg.bc.left) + " right=" + bc_to_string(cfg.bc.right) +

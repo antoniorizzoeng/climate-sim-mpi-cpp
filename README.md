@@ -51,7 +51,7 @@ $$
 \Delta t\sum_{a\in A}\left(\frac{|v_a|}{h_a}+\frac{2D_a}{h_a^2}\right)\leq 1.
 $$
 
-Volumes with uniform wind clamp to this limit. File wind uses the maximum absolute speed of each component across all cells and records, and rejects an excessive step. The legacy 2D uniform-wind path clamps advection and diffusion separately. Choose a timestep satisfying the combined bound when both act. [Discretisation and boundary conditions](docs/numerics.md)
+Runs with uniform wind clamp to this limit. File wind uses the maximum absolute speed of each component across all cells and records, and rejects an excessive step. [Discretisation and boundary conditions](docs/numerics.md)
 
 ```mermaid
 flowchart LR

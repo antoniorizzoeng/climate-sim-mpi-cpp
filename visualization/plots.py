@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
 
-from .io import load_global, list_available_steps
+from .io import load_global, list_available_steps, load_metadata, simulation_step
 
 
 def _imshow(ax: plt.Axes, U: np.ndarray, cmap: str, vmin: Optional[float], vmax: Optional[float]):
@@ -208,7 +208,8 @@ def animate_from_outputs(
 
     fig, ax = plt.subplots(figsize=(6, 6))
     im = _imshow(ax, first, cmap, vmin, vmax)
-    ttl = ax.set_title(f"{title_prefix}: {steps[0]}")
+    run_metadata = load_metadata(base_outputs_dir)
+    ttl = ax.set_title(f"{title_prefix}: {simulation_step(steps[0], run_metadata)}")
 
     if overlay_minmax:
         _overlay_minmax(ax, first)
@@ -216,10 +217,10 @@ def animate_from_outputs(
         _overlay_metadata(ax, metadata)
 
     def _update(frame_idx: int):
-        step = steps[frame_idx]
-        U = load_global(base_outputs_dir, step, var=var)
+        frame = steps[frame_idx]
+        U = load_global(base_outputs_dir, frame, var=var)
         im.set_data(U)
-        ttl.set_text(f"{title_prefix}: {step}")
+        ttl.set_text(f"{title_prefix}: {simulation_step(frame, run_metadata)}")
 
         for txt in ax.texts[:]:
             txt.remove()

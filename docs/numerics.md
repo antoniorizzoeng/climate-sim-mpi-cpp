@@ -129,7 +129,7 @@ $$
 C_a=|v_a|\Delta t/h_a,\qquad \mu_a=D_a\Delta t/h_a^2.
 $$
 
-Here $A$ contains the two or three active axes and $h_a$ denotes the spacing. For a uniform 3D wind the engine clamps to this combined bound. For a file wind it scans all records, uses component-wise global speed maxima and rejects a timestep above the bound. Uniform 2D wind retains the separate advection and diffusion clamps in `safe_dt`. When both terms act, choose a timestep satisfying the combined bound yourself.
+Here $A$ contains the two or three active axes and $h_a$ denotes the spacing. For a uniform wind the engine clamps to this combined bound. For a file wind it scans all records, uses component-wise global speed maxima and rejects a timestep above the bound.
 
 ## 5. Boundary Conditions (BCs)
 
@@ -150,6 +150,8 @@ u_0(x,y) = A \exp\left(-\frac{(x-x_c)^2 + (y-y_c)^2}{2\sigma^2}\right)
 $$
 
 Parameters $(A,\sigma,x_c,y_c)$ are configurable; computed locally from global coordinates so all ranks agree.
+
+The maximum absolute value in a file IC and the absolute Gaussian amplitude must be at most `DBL_MAX / 4` (about $4.49 \times 10^{307}$). The solver checks this at initialization so the difference stencil has headroom when neighboring cells have opposite signs.
 
 ## 7. Conservation and diagnostics
 
