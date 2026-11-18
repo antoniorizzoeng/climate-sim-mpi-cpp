@@ -140,3 +140,10 @@ add_it(integration_ic                simulation/integration/integration_ic.cpp)
 add_executable(integration_ic_file simulation/integration/integration_ic_file.cpp)
 target_link_libraries(integration_ic_file PRIVATE integration_helpers GTest::gtest_main)
 gtest_discover_tests(integration_ic_file DISCOVERY_TIMEOUT 60 PROPERTIES TIMEOUT 30)
+
+foreach(case uniform shear interpolation stability bad_dimensions empty_tiles input_protection)
+  add_test(NAME FileWind.${case}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/file_wind.py
+            FileWind.test_${case} $<TARGET_FILE:climate_sim> ${MPIEXEC_NUMPROC_FLAG}
+            ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
+endforeach()

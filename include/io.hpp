@@ -18,6 +18,13 @@ struct ICConfig {
     std::string var = "u";
 };
 
+struct WindConfig {
+    std::string mode = "uniform";
+    std::string path;
+    std::string vx_var = "vx", vy_var = "vy";
+    double interval = 3600.0;
+};
+
 struct SimConfig {
     int nx = 256, ny = 256;
     bool nx_explicit = false, ny_explicit = false;
@@ -37,6 +44,7 @@ struct SimConfig {
     std::optional<std::string> progress_path;
 
     ICConfig ic{};
+    WindConfig wind{};
 
     void validate() const;
 };
@@ -58,6 +66,11 @@ struct CLIOverrides {
         std::optional<std::string> mode, preset, path, format, var;
         std::optional<double> A, sigma_frac, xc_frac, yc_frac;
     } ic;
+
+    struct {
+        std::optional<std::string> mode, path, vx_var, vy_var;
+        std::optional<double> interval;
+    } wind;
 };
 
 SimConfig load_yaml_file(const std::string& path);

@@ -3,10 +3,12 @@
 #include <algorithm>
 
 static inline void fill_col(Field& f, int i, int j0, int j1, double v) {
-    for (int j = j0; j <= j1; ++j) f.at(i, j) = v;
+    double* col = &f.at(i, j0);
+    const size_t pitch = f.nx_total();
+    for (int j = 0; j <= j1 - j0; ++j) col[j * pitch] = v;
 }
 static inline void fill_row(Field& f, int j, int i0, int i1, double v) {
-    for (int i = i0; i <= i1; ++i) f.at(i, j) = v;
+    std::fill_n(&f.at(i0, j), i1 - i0 + 1, v);
 }
 
 void apply_boundary(Field& f, const Decomp2D& dec, const BCConfig& bc, double value = 0.0) {
@@ -40,7 +42,7 @@ void apply_boundary(Field& f, const Decomp2D& dec, const BCConfig& bc, double va
         if (bc.bottom == BCType::Dirichlet) {
             fill_row(f, jB, i0, i1, value);
         } else if (bc.bottom == BCType::Neumann) {
-            for (int i = i0; i <= i1; ++i) f.at(i, jB) = f.at(i, h);
+            std::copy_n(&f.at(i0, h), f.nx_total(), &f.at(i0, jB));
         }
     }
 
@@ -48,7 +50,7 @@ void apply_boundary(Field& f, const Decomp2D& dec, const BCConfig& bc, double va
         if (bc.top == BCType::Dirichlet) {
             fill_row(f, jT, i0, i1, value);
         } else if (bc.top == BCType::Neumann) {
-            for (int i = i0; i <= i1; ++i) f.at(i, jT) = f.at(i, h + ny - 1);
+            std::copy_n(&f.at(i0, h + ny - 1), f.nx_total(), &f.at(i0, jT));
         }
     }
 }

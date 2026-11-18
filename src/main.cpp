@@ -24,6 +24,7 @@
 #include "io.hpp"
 #include "stability.hpp"
 #include "step.hpp"
+#include "wind.hpp"
 
 namespace fs = std::filesystem;
 
@@ -139,13 +140,30 @@ int main(int argc, char** argv) {
 
         SimConfig cfg = merged_config(cfg_path, args, &progress.path);
         progress.steps = cfg.steps;
-        const double dt_limit = safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
-        if (cfg.dt > dt_limit) {
-            if (rank == 0) {
-                std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit " << dt_limit
-                          << " -> clamping to dt=" << dt_limit << "\n";
+        const bool file_wind = cfg.wind.mode == "file";
+        if (file_wind) {
+            on_root(rank, [&] {
+                const fs::path path = fs::weakly_canonical(cfg.wind.path);
+                auto same_as_wind = [&](const std::string& other) {
+                    return path == fs::weakly_canonical(other) ||
+                           (fs::exists(path) && fs::exists(other) && fs::equivalent(path, other));
+                };
+                if (progress.path && same_as_wind(*progress.path)) {
+                    progress.path.reset();
+                    throw std::runtime_error("Wind and progress paths must be different");
+                }
+                if (same_as_wind(cfg.output_path))
+                    throw std::runtime_error("Wind and snapshot paths must be different");
+            });
+        } else {
+            const double dt_limit = safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
+            if (cfg.dt > dt_limit) {
+                if (rank == 0) {
+                    std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit " << dt_limit
+                              << " -> clamping to dt=" << dt_limit << "\n";
+                }
+                cfg.dt = dt_limit;
             }
-            cfg.dt = dt_limit;
         }
         if (cfg.dt <= 0 || !std::isfinite(cfg.steps * cfg.dt))
             throw std::runtime_error("Simulation timestep or total time is out of range");
@@ -166,12 +184,19 @@ int main(int argc, char** argv) {
         }
 
         Field u = initialize_field(MPI_COMM_WORLD, dec, cfg);
+        std::optional<WindFile> wind;
+        if (file_wind)
+            wind.emplace(dec, cfg);
         Field tmp(dec.nx_local, dec.ny_local, u.halo, cfg.dx, cfg.dy);
         if (rank == 0) {
             std::cout << "climate-sim-mpi-cpp \n"
                       << "  grid: " << cfg.nx << " x " << cfg.ny << "  dt: " << cfg.dt
-                      << "  steps: " << cfg.steps << "  D: " << cfg.D << "  v=(" << cfg.vx << ","
-                      << cfg.vy << ")\n"
+                      << "  steps: " << cfg.steps << "  D: " << cfg.D;
+            if (file_wind)
+                std::cout << "  wind file: " << cfg.wind.path;
+            else
+                std::cout << "  v=(" << cfg.vx << "," << cfg.vy << ")";
+            std::cout << "\n"
                       << "  bc: left=" << bc_to_string(cfg.bc.left)
                       << " right=" << bc_to_string(cfg.bc.right)
                       << " bottom=" << bc_to_string(cfg.bc.bottom)
@@ -206,7 +231,10 @@ int main(int argc, char** argv) {
             if (progress.step % cfg.out_every == 0)
                 snapshot();
 
-            advance_field(u, tmp, dec, cfg);
+            if (wind)
+                advance_field(u, tmp, dec, cfg, wind->sample(progress.step * cfg.dt));
+            else
+                advance_field(u, tmp, dec, cfg);
             ++progress.step;
             sum_step += MPI_Wtime() - ts;
         }

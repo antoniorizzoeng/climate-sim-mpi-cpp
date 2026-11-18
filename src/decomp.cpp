@@ -2,7 +2,7 @@
 
 #include <mpi.h>
 
-void Decomp2D::init(MPI_Comm comm_world, int nxg, int nyg) {
+void Decomp2D::init(MPI_Comm comm_world, int nxg, int nyg, bool periodic_x, bool periodic_y) {
     nx_global = nxg;
     ny_global = nyg;
 
@@ -11,7 +11,8 @@ void Decomp2D::init(MPI_Comm comm_world, int nxg, int nyg) {
     MPI_Comm_rank(comm_world, &world_rank);
 
     MPI_Dims_create(size, 2, dims);
-    int periods[2] = {0, 0};
+    periods[0] = periodic_x;
+    periods[1] = periodic_y;
     MPI_Cart_create(comm_world, 2, dims, periods, 0, &cart_comm);
 
     int cart_rank = 0;

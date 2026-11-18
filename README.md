@@ -16,7 +16,7 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 - Parallel domain decomposition (2D Cartesian).
 - Diffusion and advection steps with configurable parameters.
 - Boundary conditions:
-  - Periodic
+  - Periodic on either or both axes, with opposite faces paired
   - Dirichlet
   - Neumann
 - Initial conditions:
@@ -48,15 +48,14 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 ## Build & Run
 
 ```bash
-mkdir build && cd build
-cmake ..
-make -j
+cmake -S . -B build -G Ninja
+cmake --build build -j
 ```
 
 Run simulation (example, 4 MPI ranks):
 
 ```bash
-mpirun --oversubscribe -np 4 ./src/climate_sim --config=configs/dev.yaml
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=configs/dev.yaml
 ```
 
 Start from a NetCDF field with `--ic.mode=file --ic.path=inputs/ic_global.nc`.
@@ -68,6 +67,15 @@ Use `--output=runs/demo/snapshots.nc` to give a run its own snapshot file and
 file is `outputs/snapshots.nc`. Each file includes the initial and final states.
 See [run outputs](docs/getting_started.md#run-outputs) for the YAML settings and
 frame timing.
+
+### Wind
+
+Uniform wind uses `physics.vx` and `physics.vy` (CLI `--vx` and `--vy`).
+Use `--wind.mode=file --wind.path=inputs/winds.nc` for cell-centred velocities.
+The engine reads each rank’s tile from a classic NetCDF file, interpolates between
+wind records, and holds the final record. Set `bc: periodic` to carry the field
+across all four edges, or pair `left` with `right` or `bottom` with `top` to wrap
+one axis. [Wind file example and timestep limit](docs/getting_started.md#wind)
 
 ### Python (visualization)
 Install dependencies with:

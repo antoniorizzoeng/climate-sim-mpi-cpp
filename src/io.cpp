@@ -62,6 +62,21 @@ std::string bc_to_string(BCType bc) {
 }
 
 void SimConfig::validate() const {
+    if ((bc.left == BCType::Periodic) != (bc.right == BCType::Periodic))
+        throw std::runtime_error("Both left and right boundaries must be periodic to wrap x");
+    if ((bc.bottom == BCType::Periodic) != (bc.top == BCType::Periodic))
+        throw std::runtime_error("Both bottom and top boundaries must be periodic to wrap y");
+    if (wind.mode != "uniform" && wind.mode != "file")
+        throw std::runtime_error("wind.mode must be uniform or file");
+    if (wind.mode == "file") {
+        if (wind.path.empty() || wind.vx_var.empty() || wind.vy_var.empty())
+            throw std::runtime_error("File wind requires wind.path, wind.vx_var and wind.vy_var");
+        if (!std::isfinite(wind.interval) || wind.interval <= 0)
+            throw std::runtime_error("wind.interval must be finite and positive");
+        if (!std::isfinite(D) || D < 0 || !std::isfinite(dx) || !std::isfinite(dy))
+            throw std::runtime_error(
+                "File wind requires finite grid spacing and nonnegative finite D");
+    }
     if (nx <= 0 || ny <= 0)
         throw std::runtime_error("nx/ny must be > 0");
     if (dx <= 0 || dy <= 0)
@@ -155,6 +170,14 @@ static SimConfig read_yaml_file(const std::string& path,
             if (bcnode["top"])
                 cfg.bc.top = bc_from_string(bcnode["top"].as<std::string>());
         }
+    }
+
+    if (auto wind = root["wind"]) {
+        assign_if(wind, "mode", cfg.wind.mode);
+        assign_if(wind, "path", cfg.wind.path);
+        assign_if(wind, "vx_var", cfg.wind.vx_var);
+        assign_if(wind, "vy_var", cfg.wind.vy_var);
+        assign_if(wind, "interval", cfg.wind.interval);
     }
 
     if (root["ic"]) {
@@ -263,6 +286,10 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
         if (try_set_int(a, "out_every", o.out_every, i))
             continue;
 
+        if (auto value = cli_string(args, "bc", i)) {
+            o.bc_left = o.bc_right = o.bc_bottom = o.bc_top = bc_from_string(*value);
+            continue;
+        }
         if (starts_with(a, "--bc.left=") || a == "--bc.left") {
             std::string val;
             if (auto v = get_value(a, "bc.left"))
@@ -311,6 +338,12 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
         if (try_set_str("output.prefix", o.output_prefix, i))
             continue;
         if (try_set_str("output_prefix", o.output_prefix, i))
+            continue;
+
+        if (try_set_str("wind.mode", o.wind.mode, i) || try_set_str("wind.path", o.wind.path, i) ||
+            try_set_str("wind.vx_var", o.wind.vx_var, i) ||
+            try_set_str("wind.vy_var", o.wind.vy_var, i) ||
+            try_set_dbl(a, "wind.interval", o.wind.interval, i))
             continue;
 
         if (try_set_str("ic.mode", o.ic.mode, i))
@@ -376,6 +409,17 @@ static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
         base.output_path = *o.output_path;
     if (o.progress_path)
         base.progress_path = o.progress_path;
+
+    if (o.wind.mode)
+        base.wind.mode = *o.wind.mode;
+    if (o.wind.path)
+        base.wind.path = *o.wind.path;
+    if (o.wind.vx_var)
+        base.wind.vx_var = *o.wind.vx_var;
+    if (o.wind.vy_var)
+        base.wind.vy_var = *o.wind.vy_var;
+    if (o.wind.interval)
+        base.wind.interval = *o.wind.interval;
 
     if (o.ic.mode)
         base.ic.mode = *o.ic.mode;
@@ -471,18 +515,29 @@ void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
         ncmpi_check(ncmpi_put_att_text(ncid, NC_GLOBAL, name, value.size(), value.c_str()), name);
     };
 
-    std::ostringstream dt;
-    dt.imbue(std::locale::classic());
-    dt << std::setprecision(std::numeric_limits<double>::max_digits10) << cfg.dt;
+    auto precise = [](double value) {
+        std::ostringstream out;
+        out.imbue(std::locale::classic());
+        out << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
+        return out.str();
+    };
 
     put_attr("description", "climate-sim-mpi-cpp");
     put_attr("grid", std::to_string(cfg.nx) + " x " + std::to_string(cfg.ny));
-    put_attr("dt", dt.str());
+    put_attr("dt", precise(cfg.dt));
     put_attr("out_every", std::to_string(cfg.out_every));
     put_attr("output_prefix", cfg.output_prefix);
     put_attr("steps", std::to_string(cfg.steps));
     put_attr("D", std::to_string(cfg.D));
-    put_attr("velocity", "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) + ")");
+    put_attr("wind_mode", cfg.wind.mode);
+    if (cfg.wind.mode == "file") {
+        put_attr("wind_path", cfg.wind.path);
+        put_attr("wind_vx_var", cfg.wind.vx_var);
+        put_attr("wind_vy_var", cfg.wind.vy_var);
+        put_attr("wind_interval", precise(cfg.wind.interval));
+        put_attr("velocity", "file");
+    } else
+        put_attr("velocity", "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) + ")");
     put_attr("boundary_conditions",
              "left=" + bc_to_string(cfg.bc.left) + " right=" + bc_to_string(cfg.bc.right) +
                  " bottom=" + bc_to_string(cfg.bc.bottom) + " top=" + bc_to_string(cfg.bc.top));

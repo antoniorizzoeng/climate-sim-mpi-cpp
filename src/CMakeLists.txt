@@ -1,6 +1,7 @@
 add_library(core
     init.cpp
     step.cpp
+    wind.cpp
     field.cpp
     decomp.cpp
     diffusion.cpp
