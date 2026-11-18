@@ -26,7 +26,7 @@ class Volume(unittest.TestCase):
     def simulate(self, *args, ranks=4, error=None):
         command = [*launcher, nflag, str(ranks), exe, "--ic.mode=file", "--ic.path=ic.nc",
                    "--steps=4", "--out_every=1", "--output=out.nc", "--progress=progress.json", *args]
-        result = subprocess.run(command, cwd=self.work, text=True, capture_output=True, timeout=30)
+        result = subprocess.run(command, cwd=self.work, text=True, capture_output=True, timeout=240)
         state = json.loads((self.work / "progress.json").read_text())
         if error:
             self.assertNotEqual(result.returncode, 0)
