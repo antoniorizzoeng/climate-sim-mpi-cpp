@@ -12,6 +12,15 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 
+# Use a static ffmpeg from the imageio-ffmpeg wheel when none is installed (CI).
+if shutil.which("ffmpeg") is None:
+    try:
+        import imageio_ffmpeg
+
+        matplotlib.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        pass
+
 @pytest.fixture()
 def tmp_outputs_dir():
     d = tempfile.mkdtemp(prefix="viz_outputs_")
