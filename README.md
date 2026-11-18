@@ -4,7 +4,7 @@
 [![clang-format](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/format.yml/badge.svg)](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/format.yml)
 [![Deploy Docs](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/docs.yml/badge.svg)](https://github.com/antoniorizzoeng/climate-sim-mpi-cpp/actions/workflows/docs.yml)
 
-High-performance 2D climate field simulation with MPI (C++), including Python-based visualization tools.
+MPI advection–diffusion simulation on 2D and 3D grids, with Python tools for plotting 2D snapshots.
 
 <p align="center">
   <img src="docs/demo.gif" alt="Simulation demo (GIF)" width="45%"/>
@@ -13,10 +13,10 @@ High-performance 2D climate field simulation with MPI (C++), including Python-ba
 ## Features
 
 ### Simulation (C++/MPI)
-- Parallel domain decomposition (2D Cartesian).
-- Diffusion and advection steps with configurable parameters.
+- Cartesian MPI decomposition with one-cell halos and contiguous x rows.
+- Fused advection and diffusion with uniform or file-based wind and an optional vertical diffusivity.
 - Boundary conditions:
-  - Periodic on either or both axes, with opposite faces paired
+  - Periodic on any axis, with opposite faces paired
   - Dirichlet
   - Neumann
 - Initial conditions:
@@ -58,6 +58,10 @@ Run simulation (example, 4 MPI ranks):
 mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=configs/dev.yaml
 ```
 
+For a volume, set `--nz` to the layer count and `--dz` to the layer spacing.
+The CDF-5 snapshot variable is `u(time, z, y, x)` for a volume and
+`u(time, y, x)` for a single layer (the default). [3D example configuration](docs/getting_started.md#3d-simulation)
+
 Start from a NetCDF field with `--ic.mode=file --ic.path=inputs/ic_global.nc`.
 The variable defaults to `u` and can be set with `--ic.var`. Omit `nx` or `ny`
 to use the corresponding file dimension. See the [file initial conditions guide](docs/getting_started.md#file-initial-conditions).
@@ -70,12 +74,11 @@ frame timing.
 
 ### Wind
 
-Uniform wind uses `physics.vx` and `physics.vy` (CLI `--vx` and `--vy`).
+Uniform wind uses `physics.vx`, `physics.vy`, and, in 3D, `physics.vz` (CLI `--vx`, `--vy`, `--vz`).
 Use `--wind.mode=file --wind.path=inputs/winds.nc` for cell-centred velocities.
 The engine reads each rank’s tile from a classic NetCDF file, interpolates between
 wind records, and holds the final record. Set `bc: periodic` to carry the field
-across all four edges, or pair `left` with `right` or `bottom` with `top` to wrap
-one axis. [Wind file example and timestep limit](docs/getting_started.md#wind)
+across the periodic faces. The x, y and z face pairs are left/right, bottom/top and front/back. [Wind file example and timestep limit](docs/getting_started.md#wind)
 
 ### Python (visualization)
 Install dependencies with:

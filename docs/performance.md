@@ -20,6 +20,67 @@ The CSV reports median milliseconds per step and global cell updates per second.
 - **Compute** times the production step, including halo exchange, physical boundaries and the buffer swap. The driver synchronizes ranks before starting its clock and reports maximum rank elapsed time.
 - **With output** uses the simulator’s `total_max`. It includes the steps, three collective snapshots at step 0, midpoint and end, and closing the file. Both modes exclude process startup, initial conditions and file creation. Progress reporting was disabled. One update is one global interior cell advanced by one step.
 
+## 3D scaling and 2D compatibility (issue #59)
+
+The portable Release build ran on the Ryzen 5 8500G host described below,
+with OpenMP, native optimization and coverage off. The volume cases used
+eight steps, unit spacing, `Dz = D = 0.05`, velocity (0.5, −0.25, 0.125)
+and `dt = 0.1`. Both volumes contain 16,777,216 cells. Each entry is a
+median of three fresh jobs. Output timings include three CDF-5 frames
+(384 MiB of field data per run) and file close.
+
+| Grid | Ranks | Compute ms/step | Compute M updates/s | With output ms/step | With output M updates/s |
+|---|---:|---:|---:|---:|---:|
+| 256³ | 1 | 129.70 | 129.4 | 219.92 | 76.3 |
+| 256³ | 2 | 99.88 | 168.0 | 213.14 | 78.7 |
+| 256³ | 4 | 50.77 | 330.4 | 138.07 | 121.5 |
+| 256³ | 12 | 27.09 | 619.4 | 162.98 | 102.9 |
+| 512 × 512 × 64 | 1 | 132.85 | 126.3 | 220.65 | 76.0 |
+| 512 × 512 × 64 | 2 | 69.64 | 240.9 | 175.11 | 95.8 |
+| 512 × 512 × 64 | 4 | 39.54 | 424.3 | 128.52 | 130.5 |
+| 512 × 512 × 64 | 12 | 34.84 | 481.6 | 127.26 | 131.8 |
+
+The 2D comparison used the parent revision `412efad` and the 3D-capable
+engine. Each entry is the median of five runs, in ms/step. The harness rotated
+the order of the two builds on every repetition. Step counts and output
+cadence match the original 2D benchmark above.
+
+| Grid | Ranks | Compute before | Compute after | With output before | With output after |
+|---|---:|---:|---:|---:|---:|
+| 512² | 1 | 0.2456 | 0.2505 | 0.3497 | 0.3505 |
+| 512² | 2 | 0.1272 | 0.1262 | 0.2935 | 0.2832 |
+| 512² | 4 | 0.0798 | 0.0801 | 0.2039 | 0.2099 |
+| 512² | 12 | 0.0504 | 0.0506 | 0.2727 | 0.2719 |
+| 2048² | 1 | 20.7462 | 20.6566 | 34.2536 | 33.8920 |
+| 2048² | 2 | 11.3872 | 11.4124 | 23.6049 | 23.6957 |
+| 2048² | 4 | 6.8095 | 6.7635 | 20.5270 | 18.3649 |
+| 2048² | 12 | 4.7497 | 4.8116 | 20.7855 | 19.5261 |
+| 4096² | 1 | 85.9385 | 85.0837 | 164.0188 | 163.0725 |
+| 4096² | 2 | 45.9989 | 45.8055 | 114.7634 | 122.7186 |
+| 4096² | 4 | 27.1115 | 27.2997 | 138.8638 | 132.1362 |
+| 4096² | 12 | 19.8867 | 20.0114 | 139.4050 | 95.0649 |
+
+Across the twelve grid/rank combinations, the geometric mean of the after/before
+time ratios was 1.002 for compute and 0.954 with output. Compute medians
+ranged from 1.0% faster to 2.0% slower. The largest compute increase, at 512²
+on one rank, changed direction in a nine-run repeat with reversed starting order
+(0.2518 ms before, 0.2497 ms after). The largest output increase was 6.9% at
+4096² on two ranks. A nine-run repeat measured 130.56 ms before and 132.41 ms
+after (+1.4%). Filesystem caching and shared-host timing limit the precision
+of the output comparison.
+
+```sh
+python3 benchmarks/step_loop.py --build build/release --grids 256x256x256 512x512x64 --repeats 3
+python3 benchmarks/step_loop.py --build build/baseline build/release --grids 512 2048 4096 --repeats 5
+```
+
+The 3D kernel sweeps contiguous x rows and parallelizes the z/y row pairs
+when OpenMP is enabled. The compiler generates the five-point single-layer
+loop from the same stencil, omitting z weights and z loads. Each rank commits
+its face datatypes once. With physical boundaries, all six disjoint receive
+faces can be in flight together. With periodic boundaries, x arrives before
+full y rows and then full z planes so edges and corners wrap correctly.
+
 ## Uniform-wind regression check for periodic boundaries and file wind
 
 The comparison used the portable Release binaries from `f14724b` and the
@@ -141,6 +202,19 @@ Five-run medians below isolate OpenMP on one rank. Both native binaries used the
 | 4096² | 454.2 | 1,078.1 | 125.1 | 144.1 |
 
 ## Numerical checks
+
+For issue #59, four updates on an 11 × 9 × 7 volume agreed with an independent
+NumPy implementation of the directional finite differences at 1, 2, 3, 4 and
+8 ranks (absolute and relative tolerances of 2e−15). A z-only diffusion case
+on a 1 × 1 × 17 grid checks the exact discrete Fourier-mode decay. Separate
+tests check wrapped edge and corner ghosts, surplus ranks, 3D file-wind
+interpolation, and the steady-wind result against uniform wind. The reference
+and file-wind cases also passed with two OpenMP threads per rank.
+
+On the portable build, the complete 2D snapshot and progress files matched
+`412efad` byte for byte in 13 comparisons. These covered mixed, periodic and
+Neumann faces on 37 × 29 at 1–4 ranks, plus a 1 × 5 Neumann run on two ranks
+that exercises the legacy empty-tile ghost exchange.
 
 The MPI reference tests compare the distributed stencil after each of six steps against the original scalar kernels on a 13 × 11 global grid. They cover all 25 valid combinations of the four boundary faces, four velocity sign combinations, pure diffusion and pure advection at 1, 2, 3 and 4 ranks. The absolute tolerance is 1e−13. The scalar reference fills periodic ghosts from the opposite global edges. Additional checks cover diagonal ghosts, exact one-cell translations across both seams and periodic mass conservation. A separate case checks that an empty tile relays its previous ghost value.
 

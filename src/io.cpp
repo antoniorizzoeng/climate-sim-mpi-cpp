@@ -66,6 +66,16 @@ void SimConfig::validate() const {
         throw std::runtime_error("Both left and right boundaries must be periodic to wrap x");
     if ((bc.bottom == BCType::Periodic) != (bc.top == BCType::Periodic))
         throw std::runtime_error("Both bottom and top boundaries must be periodic to wrap y");
+    if ((bc.front == BCType::Periodic) != (bc.back == BCType::Periodic))
+        throw std::runtime_error("Both front and back boundaries must be periodic to wrap z");
+    if (nz < 1 || !std::isfinite(dz) || dz <= 0)
+        throw std::runtime_error("nz and dz must be positive and finite");
+    if ((Dz && (!std::isfinite(*Dz) || *Dz < 0)) || !std::isfinite(vz))
+        throw std::runtime_error("Expected finite vz and nonnegative finite Dz");
+    if (nz > 1 && (!std::isfinite(D) || D < 0 || !std::isfinite(dx) || !std::isfinite(dy) ||
+                   !std::isfinite(vx) || !std::isfinite(vy)))
+        throw std::runtime_error(
+            "3D physics requires finite grid spacing and velocities and nonnegative finite D");
     if (wind.mode != "uniform" && wind.mode != "file")
         throw std::runtime_error("wind.mode must be uniform or file");
     if (wind.mode == "file") {
@@ -79,6 +89,9 @@ void SimConfig::validate() const {
     }
     if (nx <= 0 || ny <= 0)
         throw std::runtime_error("nx/ny must be > 0");
+    const int max_extent = std::numeric_limits<int>::max() - 2;
+    if (nx > max_extent || ny > max_extent || nz > max_extent)
+        throw std::runtime_error("Grid dimensions exceed the halo-padded index range");
     if (dx <= 0 || dy <= 0)
         throw std::runtime_error("dx/dy must be > 0");
     if (!std::isfinite(dt) || dt <= 0)
@@ -126,21 +139,21 @@ static SimConfig read_yaml_file(const std::string& path,
     const auto grid = root["grid"] ? root["grid"] : root;
     cfg.nx_explicit = grid["nx"].IsDefined();
     cfg.ny_explicit = grid["ny"].IsDefined();
+    cfg.nz_explicit = grid["nz"].IsDefined();
+    assign_if(grid, "nz", cfg.nz);
+    assign_if(grid, "dz", cfg.dz);
     assign_if(grid, "nx", cfg.nx);
     assign_if(grid, "ny", cfg.ny);
     assign_if(grid, "dx", cfg.dx);
     assign_if(grid, "dy", cfg.dy);
 
-    if (root["physics"]) {
-        auto p = root["physics"];
-        assign_if(p, "D", cfg.D);
-        assign_if(p, "vx", cfg.vx);
-        assign_if(p, "vy", cfg.vy);
-    } else {
-        assign_if(root, "D", cfg.D);
-        assign_if(root, "vx", cfg.vx);
-        assign_if(root, "vy", cfg.vy);
-    }
+    const auto physics = root["physics"] ? root["physics"] : root;
+    assign_if(physics, "D", cfg.D);
+    if (physics["Dz"])
+        cfg.Dz = physics["Dz"].as<double>();
+    assign_if(physics, "vx", cfg.vx);
+    assign_if(physics, "vy", cfg.vy);
+    assign_if(physics, "vz", cfg.vz);
 
     if (root["time"]) {
         auto t = root["time"];
@@ -159,8 +172,13 @@ static SimConfig read_yaml_file(const std::string& path,
         auto bcnode = root["bc"];
         if (bcnode.IsScalar()) {
             auto b = bc_from_string(bcnode.as<std::string>());
-            cfg.bc.left = cfg.bc.right = cfg.bc.bottom = cfg.bc.top = b;
+            cfg.bc.left = cfg.bc.right = cfg.bc.bottom = cfg.bc.top = cfg.bc.front = cfg.bc.back =
+                b;
         } else {
+            if (bcnode["front"])
+                cfg.bc.front = bc_from_string(bcnode["front"].as<std::string>());
+            if (bcnode["back"])
+                cfg.bc.back = bc_from_string(bcnode["back"].as<std::string>());
             if (bcnode["left"])
                 cfg.bc.left = bc_from_string(bcnode["left"].as<std::string>());
             if (bcnode["right"])
@@ -177,11 +195,15 @@ static SimConfig read_yaml_file(const std::string& path,
         assign_if(wind, "path", cfg.wind.path);
         assign_if(wind, "vx_var", cfg.wind.vx_var);
         assign_if(wind, "vy_var", cfg.wind.vy_var);
+        assign_if(wind, "vz_var", cfg.wind.vz_var);
         assign_if(wind, "interval", cfg.wind.interval);
     }
 
     if (root["ic"]) {
         auto ic = root["ic"];
+        assign_if(ic, "zc_frac", cfg.ic.zc_frac);
+        if (ic["replicate_z"])
+            cfg.ic.replicate_z = ic["replicate_z"].as<bool>();
         if (ic["mode"])
             cfg.ic.mode = ic["mode"].as<std::string>();
         if (ic["preset"])
@@ -263,6 +285,9 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
 
+        if (try_set_int(a, "nz", o.nz, i) || try_set_dbl(a, "dz", o.dz, i) ||
+            try_set_dbl(a, "Dz", o.Dz, i) || try_set_dbl(a, "vz", o.vz, i))
+            continue;
         if (try_set_int(a, "nx", o.nx, i))
             continue;
         if (try_set_int(a, "ny", o.ny, i))
@@ -287,50 +312,20 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
             continue;
 
         if (auto value = cli_string(args, "bc", i)) {
-            o.bc_left = o.bc_right = o.bc_bottom = o.bc_top = bc_from_string(*value);
+            o.bc_left = o.bc_right = o.bc_bottom = o.bc_top = o.bc_front = o.bc_back =
+                bc_from_string(*value);
             continue;
         }
-        if (starts_with(a, "--bc.left=") || a == "--bc.left") {
-            std::string val;
-            if (auto v = get_value(a, "bc.left"))
-                val = *v;
-            else if (a == "--bc.left" && i + 1 < args.size())
-                val = args[i + 1];
-            if (!val.empty())
-                o.bc_left = bc_from_string(val);
-            continue;
-        }
-        if (starts_with(a, "--bc.right=") || a == "--bc.right") {
-            std::string val;
-            if (auto v = get_value(a, "bc.right"))
-                val = *v;
-            else if (a == "--bc.right" && i + 1 < args.size())
-                val = args[i + 1];
-            if (!val.empty())
-                o.bc_right = bc_from_string(val);
-            continue;
-        }
-        if (starts_with(a, "--bc.bottom=") || a == "--bc.bottom") {
-            std::string val;
-            if (auto v = get_value(a, "bc.bottom"))
-                val = *v;
-            else if (a == "--bc.bottom" && i + 1 < args.size())
-                val = args[i + 1];
-            if (!val.empty())
-                o.bc_bottom = bc_from_string(val);
-            continue;
-        }
-        if (starts_with(a, "--bc.top=") || a == "--bc.top") {
-            std::string val;
-            if (auto v = get_value(a, "bc.top"))
-                val = *v;
-            else if (a == "--bc.top" && i + 1 < args.size())
-                val = args[i + 1];
-            if (!val.empty())
-                o.bc_top = bc_from_string(val);
-            continue;
-        }
-
+        auto set_face = [&](const char* key, std::optional<BCType>& face) {
+            if (auto value = cli_string(args, key, i); value && !value->empty())
+                face = bc_from_string(*value);
+        };
+        set_face("bc.left", o.bc_left);
+        set_face("bc.right", o.bc_right);
+        set_face("bc.bottom", o.bc_bottom);
+        set_face("bc.top", o.bc_top);
+        set_face("bc.front", o.bc_front);
+        set_face("bc.back", o.bc_back);
         if (try_set_str("output", o.output_path, i))
             continue;
         if (try_set_str("progress", o.progress_path, i))
@@ -342,10 +337,15 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
 
         if (try_set_str("wind.mode", o.wind.mode, i) || try_set_str("wind.path", o.wind.path, i) ||
             try_set_str("wind.vx_var", o.wind.vx_var, i) ||
+            try_set_str("wind.vz_var", o.wind.vz_var, i) ||
             try_set_str("wind.vy_var", o.wind.vy_var, i) ||
             try_set_dbl(a, "wind.interval", o.wind.interval, i))
             continue;
 
+        if (auto value = cli_string(args, "ic.replicate_z", i))
+            o.ic.replicate_z = YAML::Node(*value).as<bool>();
+        if (try_set_dbl(a, "ic.zc_frac", o.ic.zc_frac, i))
+            continue;
         if (try_set_str("ic.mode", o.ic.mode, i))
             continue;
         if (try_set_str("ic.preset", o.ic.preset, i))
@@ -367,6 +367,26 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
 }
 
 static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
+    if (o.nz) {
+        base.nz = *o.nz;
+        base.nz_explicit = true;
+    }
+    if (o.dz)
+        base.dz = *o.dz;
+    if (o.Dz)
+        base.Dz = o.Dz;
+    if (o.vz)
+        base.vz = *o.vz;
+    if (o.bc_front)
+        base.bc.front = *o.bc_front;
+    if (o.bc_back)
+        base.bc.back = *o.bc_back;
+    if (o.wind.vz_var)
+        base.wind.vz_var = *o.wind.vz_var;
+    if (o.ic.replicate_z)
+        base.ic.replicate_z = *o.ic.replicate_z;
+    if (o.ic.zc_frac)
+        base.ic.zc_frac = *o.ic.zc_frac;
     if (o.nx) {
         base.nx = *o.nx;
         base.nx_explicit = true;
@@ -464,22 +484,27 @@ SimConfig merged_config(const std::optional<std::string>& yaml_path,
 }
 
 int open_netcdf_parallel(const std::string& filename,
-                         const Decomp2D& dec,
+                         const Decomposition& dec,
                          const SimConfig& cfg,
                          MPI_Comm comm,
                          int& ncid,
                          int& varid) {
-    int dim_time, dim_y, dim_x;
+    int dim_time, dim_y, dim_x, dim_z;
+    const bool volume = dec.nz_global > 1;
     int status =
         ncmpi_create(comm, filename.c_str(), NC_CLOBBER | NC_64BIT_DATA, MPI_INFO_NULL, &ncid);
     ncmpi_check(collective_status(comm, status), "ncmpi_create");
 
     ncmpi_check(ncmpi_def_dim(ncid, "time", NC_UNLIMITED, &dim_time), "def_dim time");
+    if (volume)
+        ncmpi_check(ncmpi_def_dim(ncid, "z", dec.nz_global, &dim_z), "def_dim z");
     ncmpi_check(ncmpi_def_dim(ncid, "y", dec.ny_global, &dim_y), "def_dim y");
     ncmpi_check(ncmpi_def_dim(ncid, "x", dec.nx_global, &dim_x), "def_dim x");
 
-    int dims[3] = {dim_time, dim_y, dim_x};
-    ncmpi_check(ncmpi_def_var(ncid, "u", NC_DOUBLE, 3, dims, &varid), "def_var u");
+    int dims[] = {dim_time, volume ? dim_z : dim_time, dim_y, dim_x};
+    ncmpi_check(
+        ncmpi_def_var(ncid, "u", NC_DOUBLE, volume ? 4 : 3, dims + (volume ? 0 : 1), &varid),
+        "def_var u");
 
     write_metadata_netcdf(ncid, cfg);
 
@@ -487,23 +512,19 @@ int open_netcdf_parallel(const std::string& filename,
     return NC_NOERR;
 }
 
-bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomp2D& dec, int step) {
-    MPI_Offset start[3], count[3];
-    start[0] = step;
-    start[1] = dec.y_offset;
-    start[2] = dec.x_offset;
-    count[0] = 1;
-    count[1] = dec.ny_local;
-    count[2] = dec.nx_local;
-
-    // Map the two interior dimensions directly onto rows of the halo-padded field.
-    const MPI_Offset imap[3] = {0, f.nx_total(), 1};
+bool write_field_netcdf(int ncid, int varid, const Field& f, const Decomposition& dec, int step) {
+    const bool volume = dec.nz_global > 1;
+    const int offset = volume ? 0 : 1;
+    const MPI_Offset start[] = {step, volume ? dec.z_offset : step, dec.y_offset, dec.x_offset};
+    const MPI_Offset count[] = {1, volume ? dec.nz_local : 1, dec.ny_local, dec.nx_local};
+    const MPI_Offset imap[] = {
+        0, volume ? static_cast<MPI_Offset>(f.plane_size()) : 0, f.nx_total(), 1};
     const double* interior = f.data.data();
-    if (dec.nx_local > 0 && dec.ny_local > 0)
-        interior = &f.at(f.halo, f.halo);
-    const int status =
-        ncmpi_put_varm_double_all(ncid, varid, start, count, nullptr, imap, interior);
-    return collective_status(dec.cart_comm, status) == NC_NOERR;
+    if (dec.nx_local && dec.ny_local && dec.nz_local)
+        interior = &f.at(f.halo, f.halo, f.z_halo);
+    const int status = ncmpi_put_varm_double_all(
+        ncid, varid, start + offset, count + offset, nullptr, imap + offset, interior);
+    return collective_status(dec.io_comm, status) == NC_NOERR;
 }
 
 void close_netcdf_parallel(int ncid, MPI_Comm comm) {
@@ -523,7 +544,15 @@ void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
     };
 
     put_attr("description", "climate-sim-mpi-cpp");
-    put_attr("grid", std::to_string(cfg.nx) + " x " + std::to_string(cfg.ny));
+    const bool volume = cfg.nz > 1;
+    put_attr("grid",
+             std::to_string(cfg.nx) + " x " + std::to_string(cfg.ny) +
+                 (volume ? " x " + std::to_string(cfg.nz) : ""));
+    if (volume) {
+        put_attr("nz", std::to_string(cfg.nz));
+        put_attr("dz", precise(cfg.dz));
+        put_attr("Dz", precise(cfg.vertical_diffusion()));
+    }
     put_attr("dt", precise(cfg.dt));
     put_attr("out_every", std::to_string(cfg.out_every));
     put_attr("output_prefix", cfg.output_prefix);
@@ -534,11 +563,18 @@ void write_metadata_netcdf(int ncid, const SimConfig& cfg) {
         put_attr("wind_path", cfg.wind.path);
         put_attr("wind_vx_var", cfg.wind.vx_var);
         put_attr("wind_vy_var", cfg.wind.vy_var);
+        if (volume && !cfg.wind.vz_var.empty())
+            put_attr("wind_vz_var", cfg.wind.vz_var);
         put_attr("wind_interval", precise(cfg.wind.interval));
         put_attr("velocity", "file");
     } else
-        put_attr("velocity", "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) + ")");
-    put_attr("boundary_conditions",
-             "left=" + bc_to_string(cfg.bc.left) + " right=" + bc_to_string(cfg.bc.right) +
-                 " bottom=" + bc_to_string(cfg.bc.bottom) + " top=" + bc_to_string(cfg.bc.top));
+        put_attr("velocity",
+                 "(" + std::to_string(cfg.vx) + "," + std::to_string(cfg.vy) +
+                     (volume ? "," + std::to_string(cfg.vz) : "") + ")");
+    put_attr(
+        "boundary_conditions",
+        "left=" + bc_to_string(cfg.bc.left) + " right=" + bc_to_string(cfg.bc.right) +
+            " bottom=" + bc_to_string(cfg.bc.bottom) + " top=" + bc_to_string(cfg.bc.top) +
+            (volume ? " front=" + bc_to_string(cfg.bc.front) + " back=" + bc_to_string(cfg.bc.back)
+                    : ""));
 }

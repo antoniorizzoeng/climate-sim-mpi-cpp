@@ -102,7 +102,7 @@ target_link_libraries(test_advection PRIVATE core GTest::gtest GTest::gtest_main
 gtest_discover_tests(test_advection DISCOVERY_TIMEOUT 30)
 
 
-add_executable(test_step_mpi simulation/unit/test_step_mpi.cpp)
+add_executable(test_step_mpi simulation/unit/test_step_mpi.cpp simulation/unit/test_volume_mpi.cpp)
 target_link_libraries(test_step_mpi PRIVATE core GTest::gtest)
 foreach(ranks RANGE 1 4)
   add_test(NAME Unit_Step.Reference_${ranks}_ranks
@@ -145,5 +145,16 @@ foreach(case uniform shear interpolation stability bad_dimensions empty_tiles in
   add_test(NAME FileWind.${case}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/file_wind.py
             FileWind.test_${case} $<TARGET_FILE:climate_sim> ${MPIEXEC_NUMPROC_FLAG}
+            ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
+endforeach()
+
+add_test(NAME Volume.Halos_8_ranks
+  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${MPIEXEC_NUMPROC_FLAG} 8
+          $<TARGET_FILE:test_step_mpi> --gtest_filter=Volume.*)
+
+foreach(case reference vertical_diffusion surplus_ranks file_wind steady_wind generators replication)
+  add_test(NAME Volume.${case}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/volume.py
+            Volume.test_${case} $<TARGET_FILE:climate_sim> ${MPIEXEC_NUMPROC_FLAG}
             ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
 endforeach()

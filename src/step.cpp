@@ -8,104 +8,122 @@
 #include "halo.hpp"
 
 namespace {
-inline double stencil(
-    const double* row, int i, int pitch, double west, double east, double south, double north) {
-    const double center = row[i];
-    const double x = west * (row[i - 1] - center) + east * (row[i + 1] - center);
-    const double y = south * ((row - pitch)[i] - center) + north * ((row + pitch)[i] - center);
-    return center + (x + y);
+struct Weights {
+    double low, high;
+};
+
+inline Weights upwind(double diffusion, double courant) {
+    return {diffusion + std::max(courant, 0.0), diffusion - std::min(courant, 0.0)};
 }
-}  // namespace
 
-void advance_field(Field& u, Field& scratch, const Decomp2D& dec, const SimConfig& cfg) {
-    exchange_halos(u, dec, dec.cart_comm);
-    apply_boundary(u, dec, cfg.bc, 0.0);
+inline double difference(const double* cell, std::ptrdiff_t stride, Weights w) {
+    return w.low * (cell[-stride] - *cell) + w.high * (cell[stride] - *cell);
+}
 
-    // When a preset grid is smaller than its process grid, empty tiles send
-    // ghost values onward. Keep the original full-buffer step in this case.
-    if (dec.nx_global < dec.dims[0] || dec.ny_global < dec.dims[1]) {
-        std::copy(u.data.begin(), u.data.end(), scratch.data.begin());
-        diffusion_step(u, scratch, cfg.D, cfg.dt);
-        advection_step(u, scratch, cfg.vx, cfg.vy, cfg.dt);
-        u.data.swap(scratch.data);
-        return;
-    }
+inline double velocity(const std::vector<double>& lo,
+                       const std::vector<double>& hi,
+                       size_t i,
+                       double a) {
+    return lo[i] == hi[i] ? lo[i] : (1.0 - a) * lo[i] + a * hi[i];
+}
 
-    const double diff_x = cfg.dt * cfg.D / (u.dx * u.dx);
-    const double diff_y = cfg.dt * cfg.D / (u.dy * u.dy);
-    const double adv_x = cfg.dt * cfg.vx / u.dx;
-    const double adv_y = cfg.dt * cfg.vy / u.dy;
-    // Upwind advection adds weight only to the upstream neighbor on each axis.
-    const double west = diff_x + std::max(adv_x, 0.0);
-    const double east = diff_x - std::min(adv_x, 0.0);
-    const double south = diff_y + std::max(adv_y, 0.0);
-    const double north = diff_y - std::min(adv_y, 0.0);
-    const int pitch = u.nx_total();
-    const double* interior = &u.at(u.halo, u.halo);
-    double* destination = &scratch.at(u.halo, u.halo);
+// The compiler emits separate five- and seven-point loops. File velocities
+// are indexed by the unpadded tile offset; scalar neighbors by padded strides.
+template <bool volume, bool file>
+void stencil(Field& u, Field& scratch, const SimConfig& cfg, const WindSample* wind) {
+    auto diffusion = [&](double D, double spacing) {
+        const double numerator = cfg.dt * D, square = spacing * spacing;
+        if constexpr (file || volume) {
+            if (!std::isnormal(square) || (D != 0 && !std::isnormal(numerator)))
+                return static_cast<double>((static_cast<long double>(cfg.dt) * D / spacing) /
+                                           spacing);
+        }
+        return numerator / square;
+    };
+    const double diff_x = diffusion(cfg.D, u.dx), diff_y = diffusion(cfg.D, u.dy);
+    const double diff_z = volume ? diffusion(cfg.vertical_diffusion(), u.dz) : 0.0;
+    const Weights uniform_x = upwind(diff_x, cfg.dt * cfg.vx / u.dx);
+    const Weights uniform_y = upwind(diff_y, cfg.dt * cfg.vy / u.dy);
+    const Weights uniform_z = volume ? upwind(diff_z, cfg.dt * cfg.vz / u.dz) : Weights{};
+    const int nx = u.nx_local, ny = u.ny_local, pitch = u.nx_total();
+    const std::ptrdiff_t plane = u.plane_size();
+    const size_t origin = u.idx(u.halo, u.halo, u.z_halo);
+    const double* interior = u.data.data() + origin;
+    double* destination = scratch.data.data() + origin;
+    const int slices = volume ? u.nz_local : 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for collapse(2) schedule(static)
 #endif
-    for (int j = 0; j < u.ny_local; ++j) {
-        const size_t start = static_cast<size_t>(j) * pitch;
-        const double* row = interior + start;
-        double* out = destination + start;
-// Keep independent neighboring updates in flight on the portable build.
+    for (int k = 0; k < slices; ++k) {
+        for (int j = 0; j < ny; ++j) {
+            const size_t start = k * plane + static_cast<size_t>(j) * pitch;
+            const double* row = interior + start;
+            double* out = destination + start;
+            const size_t offset = (static_cast<size_t>(k) * ny + j) * nx;
 #if defined(__GNUC__) && (__GNUC__ >= 8 || defined(__clang__))
 #pragma GCC unroll 4
 #endif
-        for (int i = 0; i < u.nx_local; ++i) {
-            out[i] = stencil(row, i, pitch, west, east, south, north);
+            for (int i = 0; i < nx; ++i) {
+                Weights x = uniform_x, y = uniform_y, z = uniform_z;
+                if constexpr (file) {
+                    const auto cell = offset + i;
+                    const double vx =
+                        velocity(wind->lower.vx, wind->upper.vx, cell, wind->fraction);
+                    const double vy =
+                        velocity(wind->lower.vy, wind->upper.vy, cell, wind->fraction);
+                    x = upwind(diff_x, cfg.dt * vx / u.dx);
+                    y = upwind(diff_y, cfg.dt * vy / u.dy);
+                    if constexpr (volume) {
+                        const double vz =
+                            wind->lower.vz.empty()
+                                ? 0
+                                : velocity(wind->lower.vz, wind->upper.vz, cell, wind->fraction);
+                        z = upwind(diff_z, cfg.dt * vz / u.dz);
+                    }
+                }
+                const double* cell = row + i;
+                double delta = difference(cell, 1, x) + difference(cell, pitch, y);
+                if constexpr (volume)
+                    delta += difference(cell, plane, z);
+                out[i] = *cell + delta;
+            }
         }
     }
     u.data.swap(scratch.data);
 }
 
-void advance_field(
-    Field& u, Field& scratch, const Decomp2D& dec, const SimConfig& cfg, WindSample wind) {
+template <bool file>
+void advance(Field& u,
+             Field& scratch,
+             const Decomposition& dec,
+             const SimConfig& cfg,
+             const WindSample* wind) {
     exchange_halos(u, dec, dec.cart_comm);
     apply_boundary(u, dec, cfg.bc, 0.0);
-    if (u.nx_local == 0 || u.ny_local == 0)
-        return;
-
-    const double dt_D = cfg.dt * cfg.D;
-    auto diffusion_weight = [&](double spacing) {
-        // Use the uniform kernel's arithmetic whenever its intermediates are representable.
-        const double square = spacing * spacing;
-        if (std::isnormal(square) && (cfg.D == 0 || std::isnormal(dt_D)))
-            return dt_D / square;
-        return static_cast<double>((static_cast<long double>(cfg.dt) * cfg.D / spacing) / spacing);
-    };
-    const double diff_x = diffusion_weight(u.dx), diff_y = diffusion_weight(u.dy);
-    const double a = wind.fraction, b = 1.0 - a;
-    auto interpolate = [a, b](double lo, double hi) { return lo == hi ? lo : b * lo + a * hi; };
-    const int pitch = u.nx_total();
-    const double* interior = &u.at(u.halo, u.halo);
-    double* destination = &scratch.at(u.halo, u.halo);
-
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static)
-#endif
-    for (int j = 0; j < u.ny_local; ++j) {
-        const size_t start = static_cast<size_t>(j) * pitch;
-        const double* row = interior + start;
-        double* out = destination + start;
-        const size_t offset = static_cast<size_t>(j) * u.nx_local;
-        for (int i = 0; i < u.nx_local; ++i) {
-            const auto k = offset + i;
-            const double vx = interpolate(wind.lower.vx[k], wind.upper.vx[k]);
-            const double vy = interpolate(wind.lower.vy[k], wind.upper.vy[k]);
-            const double adv_x = cfg.dt * vx / u.dx;
-            const double adv_y = cfg.dt * vy / u.dy;
-            out[i] = stencil(row,
-                             i,
-                             pitch,
-                             diff_x + std::max(adv_x, 0.0),
-                             diff_x - std::min(adv_x, 0.0),
-                             diff_y + std::max(adv_y, 0.0),
-                             diff_y - std::min(adv_y, 0.0));
+    if constexpr (!file) {
+        if (dec.nx_global < dec.dims[0] || dec.ny_global < dec.dims[1]) {
+            // Legacy empty 2D tiles relay their previous ghost on the next step.
+            std::copy(u.data.begin(), u.data.end(), scratch.data.begin());
+            diffusion_step(u, scratch, cfg.D, cfg.dt);
+            advection_step(u, scratch, cfg.vx, cfg.vy, cfg.dt);
+            u.data.swap(scratch.data);
+            return;
         }
     }
-    u.data.swap(scratch.data);
+    if (!u.nx_local || !u.ny_local || !u.nz_local)
+        return;
+    if (u.z_halo)
+        stencil<true, file>(u, scratch, cfg, wind);
+    else
+        stencil<false, file>(u, scratch, cfg, wind);
+}
+}  // namespace
+
+void advance_field(Field& u, Field& scratch, const Decomposition& dec, const SimConfig& cfg) {
+    advance<false>(u, scratch, dec, cfg, nullptr);
+}
+void advance_field(
+    Field& u, Field& scratch, const Decomposition& dec, const SimConfig& cfg, WindSample wind) {
+    advance<true>(u, scratch, dec, cfg, &wind);
 }

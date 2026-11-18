@@ -3,8 +3,6 @@
 void diffusion_step(const Field& u, Field& out, double D, double dt) {
     const double dx = u.dx;
     const double dy = u.dy;
-    const double ax = D * dt / (dx * dx);
-    const double ay = D * dt / (dy * dy);
 
     for (int j = u.halo; j < u.ny_local + u.halo; ++j) {
         for (int i = u.halo; i < u.nx_local + u.halo; ++i) {

@@ -5,7 +5,7 @@
 
 class WindFile : private netcdf_input::ParallelInputFile {
    public:
-    WindFile(const Decomp2D& dec, const SimConfig& cfg);
+    WindFile(const Decomposition& dec, const SimConfig& cfg);
     WindSample sample(double time);
 
    private:
@@ -15,9 +15,9 @@ class WindFile : private netcdf_input::ParallelInputFile {
     };
     void read(MPI_Offset index, Record& record);
 
-    const Decomp2D& dec_;
+    const Decomposition& dec_;
     double interval_;
-    int varids_[2]{};
+    int varids_[3]{-1, -1, -1};
     int ndims_ = 0;
     MPI_Offset records_ = 1;
     Record lower_, upper_;

@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     RunProgress progress;
-    Decomp2D dec;
+    Decomposition dec;
     int ncid = -1;
     int result = 0;
     try {
@@ -155,20 +155,7 @@ int main(int argc, char** argv) {
                 if (same_as_wind(cfg.output_path))
                     throw std::runtime_error("Wind and snapshot paths must be different");
             });
-        } else {
-            const double dt_limit = safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
-            if (cfg.dt > dt_limit) {
-                if (rank == 0) {
-                    std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit " << dt_limit
-                              << " -> clamping to dt=" << dt_limit << "\n";
-                }
-                cfg.dt = dt_limit;
-            }
         }
-        if (cfg.dt <= 0 || !std::isfinite(cfg.steps * cfg.dt))
-            throw std::runtime_error("Simulation timestep or total time is out of range");
-        progress.dt = cfg.dt;
-
         if (progress.path) {
             on_root(rank, [&] {
                 if (fs::weakly_canonical(cfg.output_path) == fs::weakly_canonical(*progress.path))
@@ -184,23 +171,54 @@ int main(int argc, char** argv) {
         }
 
         Field u = initialize_field(MPI_COMM_WORLD, dec, cfg);
+        if (!file_wind) {
+            const double dt_limit = cfg.nz > 1 ? combined_dt(cfg.dx,
+                                                             cfg.dy,
+                                                             cfg.vx,
+                                                             cfg.vy,
+                                                             cfg.D,
+                                                             cfg.dz,
+                                                             cfg.vz,
+                                                             cfg.vertical_diffusion())
+                                               : safe_dt(cfg.dx, cfg.dy, cfg.vx, cfg.vy, cfg.D);
+            if (cfg.dt > dt_limit) {
+                if (rank == 0) {
+                    std::cerr << "[warn] dt=" << cfg.dt << " exceeds stability limit " << dt_limit
+                              << " -> clamping to dt=" << dt_limit << "\n";
+                }
+                cfg.dt = dt_limit;
+            }
+        }
+        if (cfg.dt <= 0 || !std::isfinite(cfg.steps * cfg.dt))
+            throw std::runtime_error("Simulation timestep or total time is out of range");
+        progress.dt = cfg.dt;
+
         std::optional<WindFile> wind;
         if (file_wind)
             wind.emplace(dec, cfg);
-        Field tmp(dec.nx_local, dec.ny_local, u.halo, cfg.dx, cfg.dy);
+        Field tmp(dec, u.halo, cfg.dx, cfg.dy, cfg.dz);
         if (rank == 0) {
             std::cout << "climate-sim-mpi-cpp \n"
-                      << "  grid: " << cfg.nx << " x " << cfg.ny << "  dt: " << cfg.dt
+                      << "  grid: " << cfg.nx << " x " << cfg.ny
+                      << (cfg.nz > 1 ? " x " + std::to_string(cfg.nz) : "") << "  dt: " << cfg.dt
                       << "  steps: " << cfg.steps << "  D: " << cfg.D;
             if (file_wind)
                 std::cout << "  wind file: " << cfg.wind.path;
-            else
-                std::cout << "  v=(" << cfg.vx << "," << cfg.vy << ")";
+            else {
+                std::cout << "  v=(" << cfg.vx << "," << cfg.vy;
+                if (cfg.nz > 1)
+                    std::cout << "," << cfg.vz;
+                std::cout << ")";
+            }
             std::cout << "\n"
                       << "  bc: left=" << bc_to_string(cfg.bc.left)
                       << " right=" << bc_to_string(cfg.bc.right)
                       << " bottom=" << bc_to_string(cfg.bc.bottom)
-                      << " top=" << bc_to_string(cfg.bc.top) << "\n";
+                      << " top=" << bc_to_string(cfg.bc.top);
+            if (cfg.nz > 1)
+                std::cout << " front=" << bc_to_string(cfg.bc.front)
+                          << " back=" << bc_to_string(cfg.bc.back);
+            std::cout << "\n";
             const auto [min, max] = std::minmax_element(u.data.begin(), u.data.end());
             std::cout << "IC min/max: " << *min << " / " << *max << "\n";
             std::cout << "Opening NetCDF file for parallel output\n";
