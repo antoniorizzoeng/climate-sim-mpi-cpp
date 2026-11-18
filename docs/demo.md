@@ -2,13 +2,16 @@
 layout: default
 ---
 
-# Demo & Gallery
+# Demo gallery
 
-Below is a short animation from a 2D Gaussian hotspot diffusing and advecting to the right.
-The simulation was run on 4 MPI ranks with periodic BCs and saved every 10 steps.
+## Across a periodic seam
 
-![Gaussian hotspot demo](demo.gif)
+![Curved bands of a scalar field travelling across periodic edges](assets/periodic-bands.gif)
 
-**Reproduce**: see [Getting Started](getting_started.md) for the exact `dev.yaml` and commands.
+This 480 × 160 run used two MPI ranks, unit grid spacing, a uniform velocity of (1.55, 0.32), diffusivity 0.13 and a timestep of 0.4. After 230 steps, the backend exported the 30 saved frames in the magma colormap.
 
-[← Back to Home](index.md)
+## A single hotspot
+
+![A Gaussian hotspot diffusing and drifting to the right](demo.gif)
+
+The hotspot makes the two terms easy to distinguish. Advection moves its centre and diffusion broadens its profile. [Run a hotspot locally](getting_started.md#run-a-demo)
