@@ -1,6 +1,6 @@
 #include "init.hpp"
 
-#include <pnetcdf.h>
+#include "netcdf_input.hpp"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -17,67 +17,12 @@
 
 namespace {
 
-void check_netcdf(int status, const std::string& action) {
-    if (status != NC_NOERR)
-        throw std::runtime_error(action + ": " + ncmpi_strerror(status));
-}
+using namespace netcdf_input;
 
-// Only rank 0 inspects the header. Propagate its result before any further collective.
-template <typename Inspect>
-void inspect_on_root(MPI_Comm comm, Inspect inspect) {
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-    std::string error;
-    if (rank == 0) {
-        try {
-            inspect();
-        } catch (const std::exception& e) {
-            error = e.what();
-        }
-    }
-    int length = static_cast<int>(error.size());
-    MPI_Bcast(&length, 1, MPI_INT, 0, comm);
-    if (length != 0) {
-        error.resize(length);
-        MPI_Bcast(error.data(), length, MPI_CHAR, 0, comm);
-        throw std::runtime_error(error);
-    }
-}
-
-int collective_status(MPI_Comm comm, int status) {
-    int result;
-    MPI_Allreduce(&status, &result, 1, MPI_INT, MPI_MIN, comm);
-    return result;
-}
-
-class InitialConditionFile {
+class InitialConditionFile : private ParallelInputFile {
    public:
-    InitialConditionFile(MPI_Comm comm, const ICConfig& cfg) : comm_(comm) {
-        if (comm == MPI_COMM_NULL)
-            throw std::runtime_error("File initial conditions require an MPI communicator.");
-
-        const std::string open_error = "Cannot open initial condition file '" + cfg.path + "'";
-        inspect_on_root(comm_, [&] {
-            int format;
-            const int status = ncmpi_inq_file_format(cfg.path.c_str(), &format);
-            check_netcdf(status, open_error);
-            if (format == NC_FORMAT_NETCDF4 || format == NC_FORMAT_NETCDF4_CLASSIC) {
-                throw std::runtime_error(open_error +
-                                         ": PnetCDF cannot read NetCDF-4/HDF5; convert to CDF-5 "
-                                         "(nccopy -k cdf5 input.nc output.nc).");
-            }
-            if (format != NC_FORMAT_CLASSIC && format != NC_FORMAT_CDF2 && format != NC_FORMAT_CDF5)
-                throw std::runtime_error(open_error + ": expected a CDF-1, CDF-2, or CDF-5 file.");
-        });
-
-        int status = ncmpi_open(comm_, cfg.path.c_str(), NC_NOWRITE, MPI_INFO_NULL, &ncid_);
-        check_netcdf(collective_status(comm_, status), open_error);
-    }
-
-    InitialConditionFile(const InitialConditionFile&) = delete;
-    InitialConditionFile& operator=(const InitialConditionFile&) = delete;
-
-    ~InitialConditionFile() { ncmpi_close(ncid_); }
+    InitialConditionFile(MPI_Comm comm, const ICConfig& cfg)
+        : ParallelInputFile(comm, cfg.path, "initial condition") {}
 
     void resolve_grid(SimConfig& cfg) {
         int grid[2] = {cfg.nx, cfg.ny};
@@ -166,8 +111,6 @@ class InitialConditionFile {
     }
 
    private:
-    MPI_Comm comm_;
-    int ncid_ = -1;
     int varid_ = -1;
 };
 
@@ -236,7 +179,8 @@ Field initialize_field(MPI_Comm comm, Decomp2D& dec, SimConfig& cfg) {
         file->resolve_grid(cfg);
     }
 
-    dec.init(comm, cfg.nx, cfg.ny);
+    dec.init(
+        comm, cfg.nx, cfg.ny, cfg.bc.left == BCType::Periodic, cfg.bc.bottom == BCType::Periodic);
     if (file && (cfg.nx < dec.dims[0] || cfg.ny < dec.dims[1]))
         throw std::runtime_error("Initial condition grid is too small for the MPI decomposition.");
 

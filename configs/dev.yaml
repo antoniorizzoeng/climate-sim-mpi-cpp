@@ -5,7 +5,7 @@ bc:
   left: dirichlet
   right: neumann
   bottom: periodic
-  top: dirichlet
+  top: periodic
 output:   { prefix: "dev" }
 
 ic:

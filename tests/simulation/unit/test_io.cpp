@@ -40,7 +40,7 @@ TEST(Unit_IO_Yaml, LoadsNestedBlocksAndBC) {
     EXPECT_EQ(bc_to_string(cfg.bc.left), "dirichlet");
     EXPECT_EQ(bc_to_string(cfg.bc.right), "neumann");
     EXPECT_EQ(bc_to_string(cfg.bc.bottom), "periodic");
-    EXPECT_EQ(bc_to_string(cfg.bc.top), "dirichlet");
+    EXPECT_EQ(bc_to_string(cfg.bc.top), "periodic");
 
     EXPECT_GE(cfg.D, 0.0);
 }
@@ -56,8 +56,12 @@ TEST(Unit_IO_CLI, SimpleScalarOverrides) {
             << "output: { prefix: \"from_yaml\" }\n";
     }
 
-    std::vector<std::string> args = {
-        "--nx=128", "--ny=256", "--dt=0.2", "--bc.left=periodic", "--output_prefix=from_cli"};
+    std::vector<std::string> args = {"--nx=128",
+                                     "--ny=256",
+                                     "--dt=0.2",
+                                     "--bc.left=periodic",
+                                     "--bc.right=periodic",
+                                     "--output_prefix=from_cli"};
 
     SimConfig merged = merged_config(tmpfile, args);
 
@@ -65,7 +69,7 @@ TEST(Unit_IO_CLI, SimpleScalarOverrides) {
     EXPECT_EQ(merged.ny, 256);
     EXPECT_DOUBLE_EQ(merged.dt, 0.2);
     EXPECT_EQ(bc_to_string(merged.bc.left), "periodic");
-    EXPECT_EQ(bc_to_string(merged.bc.right), "dirichlet");
+    EXPECT_EQ(bc_to_string(merged.bc.right), "periodic");
     EXPECT_EQ(merged.output_prefix, "from_cli");
 }
 
@@ -270,29 +274,51 @@ TEST(Unit_IO_File, WriteMetadataAndReadBack_PNetCDF) {
     MPI_Finalize();
 }
 TEST(Unit_IO_CLI, BoundaryOverridesBothForms) {
-    std::vector<std::string> args = {"--bc.left=neumann",
-                                     "--bc.right",
-                                     "periodic",
-                                     "--bc.bottom=neumann",
-                                     "--bc.top",
-                                     "periodic"};
-    SimConfig cfg = merged_config(std::nullopt, args);
+    auto cfg = merged_config(std::nullopt,
+                             {"--bc.left",
+                              "neumann",
+                              "--bc.right=dirichlet",
+                              "--bc.bottom=periodic",
+                              "--bc.top",
+                              "periodic"});
     EXPECT_EQ(cfg.bc.left, BCType::Neumann);
-    EXPECT_EQ(cfg.bc.right, BCType::Periodic);
-    EXPECT_EQ(cfg.bc.bottom, BCType::Neumann);
+    EXPECT_EQ(cfg.bc.right, BCType::Dirichlet);
+    EXPECT_EQ(cfg.bc.bottom, BCType::Periodic);
     EXPECT_EQ(cfg.bc.top, BCType::Periodic);
+}
 
-    std::vector<std::string> args2 = {"--bc.left",
-                                      "periodic",
-                                      "--bc.right=neumann",
-                                      "--bc.bottom",
-                                      "periodic",
-                                      "--bc.top=neumann"};
-    SimConfig cfg2 = merged_config(std::nullopt, args2);
-    EXPECT_EQ(cfg2.bc.left, BCType::Periodic);
-    EXPECT_EQ(cfg2.bc.right, BCType::Neumann);
-    EXPECT_EQ(cfg2.bc.bottom, BCType::Periodic);
-    EXPECT_EQ(cfg2.bc.top, BCType::Neumann);
+TEST(Unit_IO_CLI, RejectsUnpairedPeriodicFaces) {
+    for (auto face : {"left", "right", "bottom", "top"}) {
+        EXPECT_THROW(merged_config(std::nullopt, {std::string("--bc.") + face + "=periodic"}),
+                     std::runtime_error);
+    }
+}
+
+TEST(Unit_IO_Config, FileWindOverridesAndValidation) {
+    auto cfg = merged_config(std::nullopt,
+                             {"--wind.mode",
+                              "file",
+                              "--wind.path=example.nc",
+                              "--wind.vx_var=east",
+                              "--wind.vy_var",
+                              "north",
+                              "--wind.interval=0.25"});
+    EXPECT_EQ(cfg.wind.mode, "file");
+    EXPECT_EQ(cfg.wind.path, "example.nc");
+    EXPECT_EQ(cfg.wind.vx_var, "east");
+    EXPECT_EQ(cfg.wind.vy_var, "north");
+    EXPECT_DOUBLE_EQ(cfg.wind.interval, 0.25);
+    for (const auto& arg : {"--wind.mode=bad",
+                            "--wind.path=",
+                            "--wind.vx_var=",
+                            "--wind.vy_var=",
+                            "--wind.interval=0",
+                            "--wind.interval=inf",
+                            "--D=-1",
+                            "--dx=nan"})
+        EXPECT_THROW(merged_config(std::nullopt, {"--wind.mode=file", "--wind.path=file.nc", arg}),
+                     std::runtime_error)
+            << arg;
 }
 
 TEST(Unit_IO_Config, ValidateRejectsBadValues) {

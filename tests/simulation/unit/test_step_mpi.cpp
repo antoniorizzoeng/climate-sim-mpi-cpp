@@ -5,6 +5,7 @@
 
 #include "advection.hpp"
 #include "diffusion.hpp"
+#include "halo.hpp"
 #include "init.hpp"
 #include "step.hpp"
 
@@ -32,6 +33,18 @@ void compare_steps(SimConfig cfg, const Decomp2D& dec, const Field& initial) {
         cfg.vx = physics.vx;
         cfg.vy = physics.vy;
         cfg.D = physics.D;
+        if (cfg.bc.left == BCType::Periodic) {
+            for (int j = 1; j <= cfg.ny; ++j) {
+                ref.at(0, j) = ref.at(cfg.nx, j);
+                ref.at(cfg.nx + 1, j) = ref.at(1, j);
+            }
+        }
+        if (cfg.bc.bottom == BCType::Periodic) {
+            for (int i = 0; i < ref.nx_total(); ++i) {
+                ref.at(i, 0) = ref.at(i, cfg.ny);
+                ref.at(i, cfg.ny + 1) = ref.at(i, 1);
+            }
+        }
         apply_boundary(ref, Decomp2D{}, cfg.bc, 0.0);
         diffusion_step(ref, next, cfg.D, cfg.dt);
         advection_step(ref, next, cfg.vx, cfg.vy, cfg.dt);
@@ -53,8 +66,6 @@ TEST(Unit_Step, MatchesGlobalReferenceForEveryBoundaryCombination) {
     cfg.ny = 11;
     cfg.dx = 0.8;
     cfg.dy = 1.7;
-    Decomp2D dec;
-    dec.init(MPI_COMM_WORLD, cfg.nx, cfg.ny);
     Field initial(cfg.nx, cfg.ny, 1, cfg.dx, cfg.dy);
     for (int j = 0; j < initial.ny_total(); ++j)
         for (int i = 0; i < initial.nx_total(); ++i)
@@ -65,9 +76,58 @@ TEST(Unit_Step, MatchesGlobalReferenceForEveryBoundaryCombination) {
         for (auto right : faces)
             for (auto bottom : faces)
                 for (auto top : faces) {
+                    if ((left == BCType::Periodic) != (right == BCType::Periodic) ||
+                        (bottom == BCType::Periodic) != (top == BCType::Periodic))
+                        continue;
+                    Decomp2D dec;
+                    dec.init(MPI_COMM_WORLD,
+                             cfg.nx,
+                             cfg.ny,
+                             left == BCType::Periodic,
+                             bottom == BCType::Periodic);
                     cfg.bc = {left, right, bottom, top};
                     compare_steps(cfg, dec, initial);
+                    dec.finalize();
                 }
+}
+
+TEST(Unit_Step, PeriodicGhostsTransportAndMass) {
+    SimConfig cfg;
+    cfg.nx = 13;
+    cfg.ny = 11;
+    cfg.bc = {BCType::Periodic, BCType::Periodic, BCType::Periodic, BCType::Periodic};
+    Decomp2D dec;
+    Field u = initialize_field(MPI_COMM_WORLD, dec, cfg);
+    Field scratch = u;
+    auto index = [&](int i, int j) {
+        int x = (dec.x_offset + i - 1 + cfg.nx) % cfg.nx;
+        int y = (dec.y_offset + j - 1 + cfg.ny) % cfg.ny;
+        return y * cfg.nx + x;
+    };
+    for (int j = 1; j <= dec.ny_local; ++j)
+        for (int i = 1; i <= dec.nx_local; ++i) u.at(i, j) = index(i, j);
+    exchange_halos(u, dec, dec.cart_comm);
+    for (int j = 0; j < u.ny_total(); ++j)
+        for (int i = 0; i < u.nx_total(); ++i) EXPECT_EQ(u.at(i, j), index(i, j));
+
+    cfg.dt = 1;
+    cfg.vx = 1;
+    advance_field(u, scratch, dec, cfg);
+    cfg.vx = 0;
+    cfg.vy = -1;
+    advance_field(u, scratch, dec, cfg);
+    for (int j = 1; j <= dec.ny_local; ++j)
+        for (int i = 1; i <= dec.nx_local; ++i) EXPECT_EQ(u.at(i, j), index(i - 1, j + 1));
+
+    cfg.D = 0.1;
+    cfg.dt = 0.25;
+    for (int step = 0; step < 9; ++step) advance_field(u, scratch, dec, cfg);
+    double local = 0, mass;
+    for (int j = 1; j <= dec.ny_local; ++j)
+        for (int i = 1; i <= dec.nx_local; ++i) local += u.at(i, j);
+    MPI_Allreduce(&local, &mass, 1, MPI_DOUBLE, MPI_SUM, dec.cart_comm);
+    int cells = cfg.nx * cfg.ny;
+    EXPECT_NEAR(mass, cells * (cells - 1) * 0.5, 1e-10);
     dec.finalize();
 }
 

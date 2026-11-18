@@ -27,7 +27,7 @@ cmake --build build --parallel
 mpirun --oversubscribe -np 4 ./build/src/climate_sim       --config=configs/dev.yaml
 ```
 
-Suggested **dev.yaml** parameters for a compelling animation (already in repo):
+For a demo that wraps in both directions, use these settings in your YAML file.
 
 ```yaml
 grid:    { nx: 512, ny: 512, dx: 1.0, dy: 1.0 }
@@ -37,8 +37,68 @@ bc:      periodic
 output:  { prefix: "dev" }
 ic:
   preset: gaussian_hotspot
-  params: { A: 1.0, sigma_frac: 0.06, xc_frac: 0.5, yc_frac: 0.5 }
+  A: 1.0
+  sigma_frac: 0.06
+  xc_frac: 0.5
+  yc_frac: 0.5
 ```
+
+## Periodic boundaries
+
+`bc: periodic` (CLI `--bc=periodic`) joins the left edge to the right and the
+bottom edge to the top. A signal crossing an edge re-enters at the opposite
+edge, including when one MPI rank owns the whole axis. To wrap x only, use
+
+```yaml
+bc: {left: periodic, right: periodic, bottom: neumann, top: neumann}
+```
+
+Each periodic face needs a periodic partner on the same axis. You can set
+individual faces with `--bc.left`, `--bc.right`, `--bc.bottom`, and `--bc.top`.
+
+## Wind
+
+Uniform wind is the default. Set its components with `physics.vx` and
+`physics.vy` or `--vx` and `--vy`. For a wind field that varies in space and
+time, generate a CDF-5 example and run it with the same grid and record interval.
+
+```bash
+python scripts/generate_wind.py --nx 64 --ny 48 --records 3 --interval 2 --outfile inputs/winds.nc
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --nx=64 --ny=48 --bc=periodic \
+  --wind.mode=file --wind.path=inputs/winds.nc --wind.interval=2 --dt=0.2 --steps=40
+```
+
+The equivalent wind configuration is
+
+```yaml
+wind:
+  mode: file
+  path: inputs/winds.nc
+  vx_var: vx
+  vy_var: vy
+  interval: 2
+```
+
+Both component variables must use the same dimensions, either `(y, x)` for
+steady wind or `(time, y, x)` for a series. The named spatial dimensions must
+match the simulation grid, including a grid inferred from the initial condition.
+Supply finite numeric, cell-centred velocities in grid-length units per second
+in a CDF-1, CDF-2, or CDF-5 file. Custom names use `--wind.vx_var` and
+`--wind.vy_var`. Convert packed data to physical velocities before use.
+
+Record zero applies at time zero. The engine linearly interpolates at the start
+of each step using `wind.interval` seconds between records (default 3600).
+This setting supplies the spacing even when the file has a time coordinate.
+After the last record, its velocities continue to apply. Each rank reads only
+its own tile and keeps at most two wind records in memory.
+
+File wind requires a timestep at or below
+`1 / (max|vx|/dx + max|vy|/dy + 2 D (1/dx² + 1/dy²))`.
+At startup the engine scans every wind record and reduces both component maxima
+across MPI ranks. An excessive timestep stops the run before its first snapshot.
+A zero denominator gives an unlimited timestep. Uniform wind retains its
+existing timestep clamping. File-wind snapshots record `wind_mode`, `wind_path`,
+`wind_vx_var`, `wind_vy_var`, and `wind_interval` as global attributes.
 
 ## Run outputs
 

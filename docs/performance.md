@@ -20,6 +20,36 @@ The CSV reports median milliseconds per step and global cell updates per second.
 - **Compute** times the production step, including halo exchange, physical boundaries and the buffer swap. The driver synchronizes ranks before starting its clock and reports maximum rank elapsed time.
 - **With output** uses the simulator’s `total_max`. It includes the steps, three collective snapshots at step 0, midpoint and end, and closing the file. Both modes exclude process startup, initial conditions and file creation. Progress reporting was disabled. One update is one global interior cell advanced by one step.
 
+## Uniform-wind regression check for periodic boundaries and file wind
+
+The comparison used the portable Release binaries from `f14724b` and the
+updated engine on the Ryzen 5 8500G host. Each entry is the median of nine
+compute-only runs of 48 steps with Dirichlet boundaries, default process
+placement, OpenMP off, and coverage off. The driver alternated build order.
+Small timing differences on this shared host can vary between runs.
+
+| Grid | MPI ranks | Before (ms/step) | After (ms/step) |
+|---|---:|---:|---:|
+| 512² | 1 | 0.2479 | 0.2452 |
+| 512² | 4 | 0.0801 | 0.0781 |
+| 2048² | 1 | 20.683 | 20.759 |
+| 2048² | 4 | 6.770 | 6.732 |
+
+At 2048² on one rank, the final median increased by 0.37%. An earlier
+nine-run comparison of the same uniform kernel measured 20.651 ms before
+and 20.623 ms after. The timing difference changed sign between runs.
+
+```sh
+python3 benchmarks/step_loop.py --build build/baseline build --grids 2048 512 \
+  --ranks 4 1 --steps 48 --repeats 9 --modes compute
+```
+
+Uniform wind retains its precomputed stencil weights. The non-periodic exchange
+posts the four faces together, and the kernel walks the two field buffers by
+row stride. Periodic exchange completes the x faces before sending full y rows
+so the corner ghosts wrap as well. File wind interpolates the two local velocity
+components and applies upwind advection and diffusion in one stencil pass.
+
 ## Baseline profile
 
 The baseline was revision `a21818f`. On 2048² with three snapshots, phase timers around the original loop gave the following median percentages of summed rank time across three runs. Halo time includes waiting for other ranks. The output column includes loop timing overhead and file close.
@@ -112,7 +142,7 @@ Five-run medians below isolate OpenMP on one rank. Both native binaries used the
 
 ## Numerical checks
 
-The MPI reference tests compare the distributed stencil after each of six steps against the original scalar kernels on a 13 × 11 global grid. They cover all 81 combinations of the four boundary faces, four velocity sign combinations, pure diffusion and pure advection at 1, 2, 3 and 4 ranks. The absolute tolerance is 1e−13. Nonzero physical ghost values exercise the existing treatment of periodic faces on the nonperiodic Cartesian communicator. A separate case checks that an empty tile relays its previous ghost value.
+The MPI reference tests compare the distributed stencil after each of six steps against the original scalar kernels on a 13 × 11 global grid. They cover all 25 valid combinations of the four boundary faces, four velocity sign combinations, pure diffusion and pure advection at 1, 2, 3 and 4 ranks. The absolute tolerance is 1e−13. The scalar reference fills periodic ghosts from the opposite global edges. Additional checks cover diagonal ghosts, exact one-cell translations across both seams and periodic mass conservation. A separate case checks that an empty tile relays its previous ghost value.
 
 For a 37 × 29 run with mixed boundaries, all four NetCDF frames agreed with the baseline within 4.45e−16 across 1–4 ranks. The comparison also checked CDF-5 format, dimension order, global attributes and final progress JSON.
 
