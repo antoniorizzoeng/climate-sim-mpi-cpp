@@ -57,3 +57,5 @@ coverage/
 *.gcno
 *.gcov
 .coverage
+/artifacts/
+artifacts/

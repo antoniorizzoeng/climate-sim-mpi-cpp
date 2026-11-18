@@ -11,14 +11,16 @@ This document formalizes the mathematical model, discretization, stability limit
 
 ## 1. Governing Equations
 
-We model a passive scalar (temperature) on a rectangular domain $\Omega \subset \mathbb{R}^2$:
+For a single layer, we model a passive scalar on a rectangular domain $\Omega \subset \mathbb{R}^2$:
 
 $$
 \frac{\partial u}{\partial t} + \mathbf{v}\cdot\nabla u = D\,\nabla^2 u,\quad \mathbf{v}=(v_x, v_y),\ D \ge 0
 $$
 
+For a volume, the left-hand side also includes $v_z\partial_z u$ and the right-hand side includes $D_z\partial_{zz}u$. The horizontal diffusivity is shared by x and y. By default $D_z=D$.
+
 Special cases:
-- **Pure advection:** $D=0$.
+- **Pure advection:** all active diffusivities are zero.
 - **Pure diffusion:** $\mathbf{v}=\mathbf{0}$.
 
 ## 2. Spatial Discretization
@@ -120,19 +122,22 @@ For $\Delta x=\Delta y$, this is $\mu \le \tfrac{1}{4}$.
 
 ### 4.3 Combined
 
-Choose $\Delta t$ to satisfy:
+For simultaneous advection and diffusion, a sufficient condition for nonnegative update weights is
 
 $$
-C_x + C_y \le 1,\quad \mu_x + \mu_y \le \frac{1}{2}
+\sum_{a\in A}(C_a+2\mu_a)\leq 1,\qquad
+C_a=|v_a|\Delta t/h_a,\qquad \mu_a=D_a\Delta t/h_a^2.
 $$
+
+Here $A$ contains the two or three active axes and $h_a$ denotes the spacing. For a uniform 3D wind the engine clamps to this combined bound. For a file wind it scans all records, uses component-wise global speed maxima and rejects a timestep above the bound. Uniform 2D wind retains the separate advection and diffusion clamps in `safe_dt`. When both terms act, choose a timestep satisfying the combined bound yourself.
 
 ## 5. Boundary Conditions (BCs)
 
 We support the following BCs (applied at physical domain boundaries; interior subdomain boundaries are handled by halo exchange):
 
 - **Dirichlet:** $u = u_b$. Implement by filling ghost cells with the boundary value.
-- **Neumann (zero-flux):** $\partial_n u = 0$. Implement by mirroring the adjacent interior value into the ghost cell.
-- **Periodic:** Opposite boundaries connected (requires periodic Cartesian communicator or manual wrap copy).
+- **Neumann (zero normal gradient):** $\partial_n u = 0$. Implement by mirroring the adjacent interior value into the ghost cell.
+- **Periodic:** Opposite faces are paired through the periodic Cartesian communicator.
 
 BCs are applied **after** halo exchange each step.
 
@@ -146,35 +151,14 @@ $$
 
 Parameters $(A,\sigma,x_c,y_c)$ are configurable; computed locally from global coordinates so all ranks agree.
 
-## 7. Conservation & Diagnostics
+## 7. Conservation and diagnostics
 
-- **Diffusion:** Does **not** conserve the domain integral exactly under Dirichlet/Neumann with FTCS; with periodic BCs and symmetric Laplacian, the sum is preserved to round-off for pure diffusion.
-- **Advection (upwind):** Introduces numerical diffusion; domain integral is preserved with periodic BCs (constant velocity, no sources/sinks).
-- **Diagnostics:** compute min/max/mean and $L^2$ norm:
+For pure diffusion, interior fluxes cancel in pairs. Periodic boundaries and zero-gradient Neumann faces preserve the sum up to rounding. A Dirichlet face can exchange scalar with the domain. For constant wind, periodic upwind transport also preserves the sum up to rounding and introduces numerical diffusion. A varying wind is applied in advective form.
 
-$$
-\|u\|_2 = \sqrt{ \sum_{i,j} u_{i,j}^2\,\Delta x\,\Delta y }
-$$
+The simulator reports initial min/max on the root rank's allocated field and reduces elapsed times across ranks. Global statistics for a saved frame can be computed from the collective output.
 
-## 8. MPI Halo Width
+## 8. Halos and volumes
 
-- With the above stencils, **halo width $h=1$** is sufficient.
-- If higher-order advection is used (e.g., 3rd-order upwind), increase $h$ accordingly.
+A one-cell halo supplies every neighbour of the five-point plane or seven-point volume stencil. Forward Euler uses the old field for every term. The fused kernel writes the updated field into a second buffer before the swap.
 
-## 9. Parameter Cheat Sheet
-
-- Safe $\Delta t$ (uniform grid, $\Delta x=\Delta y=\Delta$):
-
-$$
-\Delta t \le \min\left( \frac{\Delta}{|v_x|+|v_y|},\ \frac{\Delta^2}{4D} \right)
-$$
-
-- Start values:
-    $$
-    \Delta = 1.0,\quad D = 0.1,\quad |\mathbf{v}| \le 1.0,\quad \Delta t = 0.1
-    $$
-    (check CFL in code).
-
----
-
-*This document is versioned with the codebase; changes to numerics should update this file.*
+[File-wind inputs](getting_started.md#wind) · [Volume configuration](getting_started.md#3d-simulation) · [Numerical comparisons](performance.md#numerical-checks)

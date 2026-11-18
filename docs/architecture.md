@@ -5,46 +5,21 @@ nav_order: 2
 
 # Architecture
 
-## Modules
-- `src/main.cpp` — entrypoint; parse config, initialize MPI, wire components, run loop.
-- `include/config.hpp` — CLI/config parsing (nx, ny, dt, steps, coeffs, output freq).
-- `include/decomp.hpp` — Cartesian 2D process grid, neighbors, local sizes/offsets.
-- `include/field.hpp` — 2D scalar field with halos; contiguous storage + indexing.
-- `include/diffusion.hpp` — 5-point stencil (explicit) diffusion.
-- `include/advection.hpp` — 1st-order upwind advection (constant vx, vy).
-- `include/boundary.hpp` — physical boundary conditions.
-- `include/io.hpp` — snapshots, reductions for stats, timing/logs.
+## From a configuration to a tile
 
-> **Single Source of Truth**: Public interfaces live in `include/*.hpp`. This document is descriptive only. See headers for authoritative signatures.
+`src/io.cpp` reads YAML and applies CLI overrides. `src/main.cpp` resolves file-backed grid dimensions, constructs the decomposition, initialises the field and drives the time loop. The default execution backend is native C++ and MPI. A Kokkos-enabled build can select device kernels at runtime.
 
-## Domain Decomposition
-- Use `MPI_Dims_create(world_size, 2, dims)` → near-square Px×Py.
-- `MPI_Cart_create` with `periods={0,0}` (can switch to periodic later).
-- Block distribution in x,y. Last ranks in each dimension take remainders.
-- Neighbors via `MPI_Cart_shift`.
+The decomposition uses `MPI_Dims_create` and `MPI_Cart_create`. A plane has one process partition in z. Volumes pin singleton axes and try alternative factorizations for thin grids. Each tile owns a contiguous block, and the last partition on each axis takes the remainder. `MPI_Cart_shift` locates adjacent ranks, including across paired periodic faces.
 
-## Halo Exchange
-- Halo width `h = 1` initially.
-- Nonblocking pattern per step: post four `MPI_Irecv`, post four `MPI_Isend`, then `MPI_Waitall`.
-- Derived datatypes for columns via `MPI_Type_vector`; rows are contiguous.
-- Physical boundaries: if neighbor is `MPI_PROC_NULL`, apply BC locally (Dirichlet/Neumann).
+## From a tile to the next timestep
 
-## Numerical Kernels
-See `include/diffusion.hpp` and `include/advection.hpp` for function signatures.
-- **Diffusion (explicit 5-point)**: stable if `alpha = D*dt/dx^2` (with `dx==dy`) satisfies `alpha ≤ 1/4`.
-- **Advection (upwind)**: CFL with `C_x + C_y ≤ 1`.
+1. Read the local wind tile if needed. A time-varying wind keeps two records and interpolates velocity at the start of the step.
+2. Exchange one-cell halos. Native MPI commits face datatypes once. Physical faces allow disjoint exchanges to proceed together. With periodicity, x arrives before full y rows, then z planes, so corners and edges wrap.
+3. Fill physical ghosts. Dirichlet faces take the specified value and Neumann faces copy the adjacent interior.
+4. Sweep contiguous x rows, advancing upwind advection and centred diffusion in one pass, then swap buffers. A legacy 2D empty-tile layout retains the separate scalar updates. Kokkos uses packed halo buffers and defaults to staging MPI traffic on the host.
 
-## Configuration (CLI)
-Example flags:
-```
---nx 512 --ny 512 --steps 1000 --dt 1e-3 --dx 1.0 --dy 1.0 --diff 0.1 --vx 0.0 --vy 0.0 --out-every 100 --bc dirichlet
-```
+## From tiles to frames
 
-## Initialization
-- Each rank allocates `Field` with local sizes + halos.
-- Initial condition (global-consistent), e.g., Gaussian hotspot centered at domain middle.
-- Prebuild MPI datatypes for halos (if not handled internally).
+PnetCDF writes each interior into one global CDF-5 variable. Its dimensions are `(time, y, x)` for a plane and `(time, z, y, x)` for a volume. The initial and final states always appear. If configured, rank zero atomically replaces a progress JSON file after each frame and on exit. MPI reductions report the maximum total elapsed time and worst average step time.
 
-## Output
-- Per-rank NetCDF tiles: `snap_<step>_r<rank>.nc` (simple and parallel).
-- Global stats: min/max/mean via reductions every `out_every` steps.
+[Run and output settings](getting_started.md#run-outputs) · [Numerical method](numerics.md) · [Step-loop measurements](performance.md)

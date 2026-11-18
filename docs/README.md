@@ -1,8 +1,8 @@
-# Documentation
+# Engine documentation
 
-This folder contains all project documentation.
-
-- **architecture.md** — Detailed architecture plan for the climate-sim-mpi-cpp project.
-- **numerics.md** — Mathematical formulation of numerical schemes, stability conditions, and discretization details.
-- **usage.md** *(future)* — How to build, run, and interpret simulation outputs.
-- **computational_analysis.md** — Thorough computational analysis of pseudocode (Weak/Strong scaling, computational and communication complexity etc...)
+- [Getting started](getting_started.md) covers builds, input files, wind records, volumes and playback.
+- [Architecture](architecture.md) follows a field from MPI tiles to a collective snapshot.
+- [Numerics](numerics.md) describes the update, timestep bounds and physical boundaries.
+- [Computational analysis](computational_analysis.md) relates local work, halo traffic and snapshot size.
+- [Performance](performance.md) records timings, hardware and reproduction steps.
+- [Demo gallery](demo.md) shows transport and diffusion in two dimensions.

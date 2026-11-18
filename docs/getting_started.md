@@ -9,9 +9,10 @@ This page shows how to build, run, and visualize a small demo locally.
 
 ## Prerequisites
 
-- C++17 compiler and CMake ≥ 3.21
+- C++17 compiler, Ninja and CMake 3.24+ for the default build with tests
 - MPI (OpenMPI or MPICH)
-- NetCDF C library (`libnetcdf-dev`)
+- PnetCDF and yaml-cpp development libraries (`libpnetcdf-dev`, `libyaml-cpp-dev`)
+- NetCDF-C development library for the tests (`libnetcdf-dev`)
 - Python 3.11+ for visualization: `pip install -r requirements.txt`
 
 ## Build
@@ -85,7 +86,7 @@ ctest --test-dir build/kserial -R Kokkos --output-on-failure
 ## Run a demo
 
 ```bash
-mpirun --oversubscribe -np 4 ./build/src/climate_sim       --config=configs/dev.yaml
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=configs/dev.yaml
 ```
 
 For a demo that wraps in both directions, use these settings in your YAML file.
@@ -288,9 +289,11 @@ with Dataset("runs/volume/snapshots.nc") as nc:
 
 ## Visualize
 
+Use a directory containing one 2D snapshot file. The CLI option `--step` takes a zero-based frame index. With the supplied development configuration, frame 4 corresponds to simulation step 400.
+
 ### Single frame (snapshot)
 ```bash
-python -m visualization.cli show --dir outputs --step 400 --save demo_frame.png --overlay-minmax
+python -m visualization.cli show --dir outputs --step 4 --save demo_frame.png --overlay-minmax
 ```
 
 ### Animation
@@ -304,9 +307,8 @@ python -m visualization.cli animate --dir outputs --fps 12 --save demo.gif --wri
 
 ## Tips
 
-- Use `--cmap plasma` or another Matplotlib colormap for different visuals.  
-- Combine overlays (`--overlay-minmax --overlay-rankgrid`) for richer diagnostics.  
-- For large runs, prefer NetCDF output for efficiency.  
+- Use `--cmap plasma` or another Matplotlib colormap for different visuals.
+- Use `--show-meta` to include file metadata on a plot.
 
 ---
 
