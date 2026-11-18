@@ -54,3 +54,15 @@ def load_metadata(base_outputs_dir: str) -> Dict[str, str]:
         meta = {attr: getattr(ds, attr) for attr in ds.ncattrs()}
 
     return meta
+
+
+def simulation_step(frame: int, metadata: Dict[str, str]) -> int:
+    """Map a stored frame to its solver step, including the final partial interval."""
+    try:
+        cadence = int(metadata["out_every"])
+        total_steps = int(metadata["steps"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return frame
+    if cadence < 1 or total_steps < 0:
+        return frame
+    return min(frame * cadence, total_steps)

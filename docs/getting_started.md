@@ -183,6 +183,8 @@ after the last step, which appears exactly once. To recover the simulation step
 for zero-based frame index `i`, use `min(i * out_every, steps)`. Multiply it by
 `dt` for the simulation time. The global attributes `out_every`, `steps`, and
 `dt` store those values, including the effective timestep after stability clamping.
+The text attributes `dx`, `dy`, `D`, and the components of the uniform
+`velocity` tuple preserve the configured double-precision values.
 
 With a progress path configured, rank 0 atomically replaces the JSON file at
 startup, after each frame, and at exit. The fields are `step` (completed steps),
@@ -250,10 +252,9 @@ Uniform 3D wind clamps the timestep to
 
 File wind uses the maximum absolute value of each component across all cells
 and records and rejects a timestep above the combined limit. A zero denominator
-allows any finite timestep. Single-layer runs use the original 2D stability
-rules and snapshot metadata. Volumes pin each singleton axis to one MPI
-partition. Single-layer runs retain the legacy horizontal rank layout, including
-empty tiles when a horizontal extent is smaller than the process grid.
+allows any finite timestep. Single-layer runs omit the vertical terms.
+The engine fits the MPI process grid to the domain. Surplus ranks participate
+in collective I/O with empty slabs.
 
 To run the same grid with generated initial conditions and time-varying winds:
 
@@ -308,6 +309,7 @@ python -m visualization.cli animate --dir outputs --fps 12 --save demo.gif --wri
 ## Tips
 
 - Use `--cmap plasma` or another Matplotlib colormap for different visuals.
+- Select snapshots by zero-based frame index. Plot titles show the corresponding simulation step.
 - Use `--show-meta` to include file metadata on a plot.
 
 ---

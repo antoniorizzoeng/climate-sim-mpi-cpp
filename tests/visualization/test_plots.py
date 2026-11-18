@@ -66,48 +66,59 @@ def test_animate_from_outputs_runtime_error(tmp_path):
     with pytest.raises(RuntimeError):
         plots.animate_from_outputs(str(tmp_path), steps=[])
 
-def test_animate_from_outputs_basic(monkeypatch):
-    steps = [0, 1]
+@pytest.fixture
+def mock_animation_io(monkeypatch):
+    monkeypatch.setattr(plots, "load_metadata", lambda d: {})
+
+    def frames(data):
+        monkeypatch.setattr(plots, "list_available_steps", lambda d: list(range(len(data))))
+        monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": data[s])
+
+    return frames
+
+
+def test_animate_from_outputs_basic(mock_animation_io):
     frames = [np.zeros((2, 2)), np.ones((2, 2))]
 
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frames[s])
+    mock_animation_io(frames)
 
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=[0, 1])
+    fig.canvas.draw()
+    anim._func(1)
+    assert ax.get_title() == "timestep: 1"
     assert isinstance(anim, FuncAnimation)
     plt.close(fig)
 
-def test_animate_from_outputs_overlay_minmax(monkeypatch):
+def test_animate_from_outputs_overlay_minmax(mock_animation_io):
     steps = [0]
     frame = np.array([[1, 2], [3, 4]])
 
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frame)
+    mock_animation_io([frame])
 
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=[0], overlay_minmax=True)
+    fig.canvas.draw()
     texts = [c for c in ax.get_children() if isinstance(c, plt.Text)]
     assert any("min=1.00" in t.get_text() for t in texts)
     assert any("max=4.00" in t.get_text() for t in texts)
     plt.close(fig)
 
-def test_animate_from_outputs_save_gif(monkeypatch, tmp_path):
+def test_animate_from_outputs_save_gif(mock_animation_io, tmp_path):
     steps = [0]
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": np.zeros((2, 2)))
+    mock_animation_io([np.zeros((2, 2))])
 
     out = tmp_path / "anim.gif"
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=[0], save=out, writer="pillow")
     assert isinstance(anim, FuncAnimation)
     plt.close(fig)
 
-def test_animate_from_outputs_update_overlay_text(monkeypatch):
+def test_animate_from_outputs_update_overlay_text(mock_animation_io):
     steps = [0, 1]
     frames = [np.zeros((2, 2)), np.ones((2, 2)) * 5]
 
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frames[s])
+    mock_animation_io(frames)
 
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=steps, overlay_minmax=True)
+    fig.canvas.draw()
     anim._func(1)  # manually call update
     texts = [c for c in ax.get_children() if isinstance(c, plt.Text)]
     assert any("min=5.00" in t.get_text() for t in texts)
@@ -140,29 +151,28 @@ def test_compare_fields_diff_vlim_and_overlay_none(tmp_path):
     fig, axes = plots.compare_fields(A, B, show_diff=True, diff_vlim=None)
     plt.close(fig)
 
-def test_animate_from_outputs_vmin_vmax_autocalc(monkeypatch):
+def test_animate_from_outputs_vmin_vmax_autocalc(mock_animation_io):
     steps = [0, 1]
     frames = [np.zeros((2, 2)), np.ones((2, 2)) * 5]
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frames[s])
+    mock_animation_io(frames)
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=steps, vmin=None, vmax=None)
+    fig.canvas.draw()
     assert isinstance(anim, FuncAnimation)
     plt.close(fig)
 
-def test_animate_from_outputs_repeat_false(monkeypatch):
+def test_animate_from_outputs_repeat_false(mock_animation_io):
     steps = [0]
     frame = np.zeros((2, 2))
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frame)
+    mock_animation_io([frame])
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=steps, repeat=False)
+    fig.canvas.draw()
     assert isinstance(anim, FuncAnimation)
     plt.close(fig)
 
-def test_animate_from_outputs_save_mp4(monkeypatch, tmp_path):
+def test_animate_from_outputs_save_mp4(mock_animation_io, tmp_path):
     steps = [0]
     frame = np.zeros((2, 2))
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frame)
+    mock_animation_io([frame])
     out = tmp_path / "anim.mp4"
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=steps, save=str(out))
     assert isinstance(anim, FuncAnimation)
@@ -186,23 +196,22 @@ def test_compare_fields_diff_vlim_zero_and_overlay_none():
     fig, axes = plots.compare_fields(A, B, show_diff=True, diff_vlim=None)
     plt.close(fig)
 
-def test_animate_from_outputs_vmin_vmax_auto_and_text_removal(monkeypatch):
+def test_animate_from_outputs_vmin_vmax_auto_and_text_removal(mock_animation_io):
     steps = [0, 1]
     frames = [np.zeros((2, 2)), np.ones((2, 2)) * 7]
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frames[s])
+    mock_animation_io(frames)
     anim, fig, ax = plots.animate_from_outputs("dummy_dir", steps=steps, overlay_minmax=True, vmin=None, vmax=None)
+    fig.canvas.draw()
     anim._func(1)
     texts = [t.get_text() for t in ax.get_children() if isinstance(t, plt.Text)]
     assert any("min=7.00" in t for t in texts)
     assert any("max=7.00" in t for t in texts)
     plt.close(fig)
 
-def test_animate_from_outputs_save_pillow_and_ffmpeg(monkeypatch, tmp_path):
+def test_animate_from_outputs_save_pillow_and_ffmpeg(mock_animation_io, tmp_path):
     steps = [0]
     frame = np.zeros((2, 2))
-    monkeypatch.setattr(plots, "list_available_steps", lambda d: steps)
-    monkeypatch.setattr(plots, "load_global", lambda d, s, var="u": frame)
+    mock_animation_io([frame])
 
     gif_out = tmp_path / "anim.gif"
     mp4_out = tmp_path / "anim.mp4"
@@ -221,3 +230,30 @@ def test_imshow_field_with_metadata_only():
     texts = [t.get_text() for t in ax.get_children() if isinstance(t, plt.Text)]
     assert any("test description" in t for t in texts)
     plt.close(fig)
+
+
+def test_snapshot_titles_use_simulation_steps(tmp_path, monkeypatch):
+    from netCDF4 import Dataset
+    from visualization import cli
+
+    with Dataset(tmp_path / "snapshots.nc", "w") as ds:
+        ds.steps, ds.out_every = "5", "2"
+        for dim, size in (("time", 4), ("y", 1), ("x", 1)):
+            ds.createDimension(dim, size)
+        ds.createVariable("u", "f8", ("time", "y", "x"))[:, 0, 0] = [0, 2, 4, 5]
+
+    anim, fig, ax = plots.animate_from_outputs(str(tmp_path), steps=[1, 2, 3])
+    fig.canvas.draw()
+    try:
+        assert ax.get_title() == "timestep: 2"
+        for idx, step in enumerate((2, 4, 5)):
+            anim._func(idx)
+            assert ax.get_title() == f"timestep: {step}"
+            assert ax.images[0].get_array().item() == step
+    finally:
+        plt.close(fig)
+
+    titles = []
+    monkeypatch.setattr(cli, "imshow_field", lambda field, **kw: titles.append(kw["title"]))
+    cli.main(["show", "--dir", str(tmp_path)])
+    assert titles == [f"{tmp_path} :: step 5"]

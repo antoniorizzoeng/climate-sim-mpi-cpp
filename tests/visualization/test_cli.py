@@ -106,6 +106,7 @@ def test_cmd_show_no_steps(monkeypatch):
         cli.cmd_show(args)
 
 def test_cmd_show_calls_imshow(monkeypatch):
+    monkeypatch.setattr(cli, "load_metadata", lambda d: {})
     monkeypatch.setattr(cli, "list_available_steps", lambda d: [0, 1, 2])
     monkeypatch.setattr(cli, "load_global", lambda *a, **k: [[1]])
     called = {}

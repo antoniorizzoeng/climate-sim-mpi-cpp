@@ -11,15 +11,13 @@ void Decomposition::init(MPI_Comm comm, int nx, int ny, int nz, bool px, bool py
     const int extent[] = {nx, ny, nz};
     int size;
     MPI_Comm_size(comm, &size);
-    // Preserve the 2D process grid and pin singleton axes. For thin volumes
-    // try other factorizations before giving surplus ranks empty I/O slabs.
-    // A legacy 1xN preset may rely on the previous ghost value of an empty
-    // horizontal tile. Keep its rank placement when running the 2D equations.
+    // Keep the default Cartesian layout if it fits. Otherwise use the largest
+    // populated grid possible and leave surplus ranks in collective I/O only.
     dims[0] = nz > 1 && nx == 1;
     dims[1] = nz > 1 && ny == 1;
     dims[2] = nz == 1;
     MPI_Dims_create(size, 3, dims);
-    if (nz > 1 && (dims[0] > nx || dims[1] > ny || dims[2] > nz)) {
+    if (dims[0] > nx || dims[1] > ny || dims[2] > nz) {
         int best = 0;
         for (int x = 1; x <= std::min(nx, size) && best < size; ++x) {
             for (int y = 1; y <= std::min(ny, size / x) && best < size; ++y) {

@@ -155,9 +155,8 @@ struct Axis {
     double spacing, diff;
     Weights uniform;
 
-    template <bool robust>
     static Axis make(double dt, double spacing, double diffusivity, double velocity) {
-        double diff = diffusion<robust>(dt, diffusivity, spacing);
+        double diff = diffusion(dt, diffusivity, spacing);
         return {spacing, diff, upwind(diff, dt * velocity / spacing)};
     }
 };
@@ -221,7 +220,7 @@ struct KokkosStep::State {
         Kokkos::deep_copy(u, HostInput(initial.data.data(), initial.data.size()));
         if (dec.cart_comm == MPI_COMM_NULL)
             return;
-        const int local[] = {nx, ny, nz}, global[] = {dec.nx_global, dec.ny_global, dec.nz_global};
+        const int local[] = {nx, ny, nz};
         const std::ptrdiff_t strides[] = {1, pitch, plane};
         const int* peers[] = {dec.nbr_lr, dec.nbr_du, dec.nbr_fb};
         const BCType types[] = {
@@ -229,8 +228,7 @@ struct KokkosStep::State {
         for (int axis = 0; axis < (hz ? 3 : 2); ++axis) {
             const auto stride = strides[axis];
             const auto last = origin + (local[axis] - 1) * stride;
-            const bool wrap =
-                dec.periods[axis] && (dec.dims[axis] == 1 || global[axis] < dec.dims[axis]);
+            const bool wrap = dec.periods[axis] && dec.dims[axis] == 1;
             for (int side = 0; side < 2; ++side) {
                 const int tag = 2 * axis + side;
                 const auto inside = side ? last : origin;
@@ -260,17 +258,15 @@ struct KokkosStep::State {
             MPI_Waitall(static_cast<int>(requests.size()), requests.data(), MPI_STATUSES_IGNORE);
             for (const auto& face : neighbors) face.unpack(u);
         }
-        // Empty legacy 2D tiles can copy a just-received ghost to their physical face.
         for (const auto& face : boundaries) face.fill(u);
     }
 
     template <bool volume, bool file>
     void stencil(DeviceWind lo, DeviceWind hi, double a) {
-        constexpr bool robust = file || volume;
-        const auto x = Axis::make<robust>(cfg.dt, cfg.dx, cfg.D, cfg.vx);
-        const auto y = Axis::make<robust>(cfg.dt, cfg.dy, cfg.D, cfg.vy);
+        const auto x = Axis::make(cfg.dt, cfg.dx, cfg.D, cfg.vx);
+        const auto y = Axis::make(cfg.dt, cfg.dy, cfg.D, cfg.vy);
         const auto z =
-            volume ? Axis::make<true>(cfg.dt, cfg.dz, cfg.vertical_diffusion(), cfg.vz) : Axis{};
+            volume ? Axis::make(cfg.dt, cfg.dz, cfg.vertical_diffusion(), cfg.vz) : Axis{};
         using Policy =
             Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Right, Kokkos::Iterate::Right>>;
         InteriorStencil<volume, file> update{
