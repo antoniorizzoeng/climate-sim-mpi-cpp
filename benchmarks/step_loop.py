@@ -28,6 +28,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path, nargs="+", default=[Path("build")],
                         help="one or more builds to measure in rotation")
+    parser.add_argument("--backends", nargs="+", choices=["cpu", "kokkos"],
+                        help="one execution backend per --build directory, in the same order")
     parser.add_argument("--ranks", nargs="+", type=int, default=sorted({1, 2, 4, available or 1}))
     parser.add_argument("--grids", nargs="+", type=grid_shape, default=[(n,n,1) for n in (512,2048,4096)],
                         help="square width or NXxNYxNZ")
@@ -40,8 +42,11 @@ def main():
     if min(args.ranks + [args.repeats]) <= 0 or (args.steps is not None and args.steps < 1):
         parser.error("grid sizes, ranks, steps and repeats must be positive")
 
+    if args.backends and len(args.backends) != len(args.build):
+        parser.error("supply one --backends entry per --build directory")
+    builds = list(zip(args.build, args.backends or ["cpu"] * len(args.build)))
     writer = csv.writer(sys.stdout)
-    writer.writerow(["build", "grid", "ranks", "mode", "steps", "repeats", "ms_per_step", "cell_updates_s"])
+    writer.writerow(["build", *(["backend"] if args.backends else []), "grid", "ranks", "mode", "steps", "repeats", "ms_per_step", "cell_updates_s"])
     with tempfile.TemporaryDirectory(dir=args.build[0]) as work:
         for nx, ny, nz in args.grids:
             grid = str(nx) if nx == ny and nz == 1 else f"{nx}x{ny}x{nz}"
@@ -58,17 +63,19 @@ def main():
                 launcher = [*shlex.split(args.launcher), "-np", str(ranks)]
                 for mode in args.modes:
                     binary = "src/climate_sim" if mode == "output" else "step_loop_bench"
-                    times = {build: [] for build in args.build}
+                    times = {case: [] for case in builds}
                     for trial in range(args.repeats):
-                        start = trial % len(args.build)
-                        for build in args.build[start:] + args.build[:start]:
+                        start = trial % len(builds)
+                        for build, backend in builds[start:] + builds[:start]:
                             command = [*launcher, build / binary, *common]
+                            if args.backends:
+                                command.append(f"--backend={backend}")
                             log = subprocess.check_output(command, text=True)
                             elapsed = float(re.search(r"total_max=([\d.eE+-]+)", log)[1])
-                            times[build].append(elapsed)
-                    for build, samples in times.items():
+                            times[build, backend].append(elapsed)
+                    for (build, backend), samples in times.items():
                         elapsed = statistics.median(samples)
-                        writer.writerow([build, grid, ranks, mode, steps, len(samples),
+                        writer.writerow([build, *([backend] if args.backends else []), grid, ranks, mode, steps, len(samples),
                                          f"{1000 * elapsed / steps:.6f}", round(math.prod((nx, ny, nz)) * steps / elapsed)])
                     sys.stdout.flush()
 

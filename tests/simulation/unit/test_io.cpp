@@ -335,3 +335,15 @@ TEST(Unit_IO_Config, ValidateRejectsBadValues) {
     SimConfig ok;
     EXPECT_NO_THROW(ok.validate());
 }
+
+TEST(Unit_IO_CLI, BackendSelection) {
+    EXPECT_EQ(merged_config(std::nullopt, {}).backend, "cpu");
+    EXPECT_EQ(merged_config(std::nullopt, {"--backend", "cpu"}).backend, "cpu");
+    for (const auto& arg : {"--backend", "--backend=", "--backend=gpu"})
+        EXPECT_THROW(merged_config(std::nullopt, {arg}), std::runtime_error);
+#ifdef CLIMATE_ENABLE_KOKKOS
+    EXPECT_EQ(merged_config(std::nullopt, {"--backend=kokkos"}).backend, "kokkos");
+#else
+    EXPECT_THROW(merged_config(std::nullopt, {"--backend=kokkos"}), std::runtime_error);
+#endif
+}

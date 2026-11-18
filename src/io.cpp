@@ -62,6 +62,12 @@ std::string bc_to_string(BCType bc) {
 }
 
 void SimConfig::validate() const {
+    if (backend != "cpu" && backend != "kokkos")
+        throw std::runtime_error("--backend must be cpu or kokkos");
+#ifndef CLIMATE_ENABLE_KOKKOS
+    if (backend == "kokkos")
+        throw std::runtime_error("--backend=kokkos requires a build with ENABLE_KOKKOS=ON");
+#endif
     if ((bc.left == BCType::Periodic) != (bc.right == BCType::Periodic))
         throw std::runtime_error("Both left and right boundaries must be periodic to wrap x");
     if ((bc.bottom == BCType::Periodic) != (bc.top == BCType::Periodic))
@@ -326,6 +332,10 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
         set_face("bc.top", o.bc_top);
         set_face("bc.front", o.bc_front);
         set_face("bc.back", o.bc_back);
+        if (try_set_str("backend", o.backend, i))
+            continue;
+        if (a == "--backend")
+            throw std::runtime_error("--backend requires cpu or kokkos");
         if (try_set_str("output", o.output_path, i))
             continue;
         if (try_set_str("progress", o.progress_path, i))
@@ -367,6 +377,8 @@ CLIOverrides parse_cli_overrides(const std::vector<std::string>& args) {
 }
 
 static void apply_overrides(SimConfig& base, const CLIOverrides& o) {
+    if (o.backend)
+        base.backend = *o.backend;
     if (o.nz) {
         base.nz = *o.nz;
         base.nz_explicit = true;

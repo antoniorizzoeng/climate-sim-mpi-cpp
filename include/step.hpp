@@ -16,6 +16,7 @@ struct WindSample {
     const WindTile& lower;
     const WindTile& upper;
     double fraction;
+    MPI_Offset lower_index = -1, upper_index = -1;  // File records cached by device backends.
 };
 
 void advance_field(

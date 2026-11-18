@@ -158,3 +158,14 @@ foreach(case reference vertical_diffusion surplus_ranks file_wind steady_wind ge
             Volume.test_${case} $<TARGET_FILE:climate_sim> ${MPIEXEC_NUMPROC_FLAG}
             ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
 endforeach()
+
+if(ENABLE_KOKKOS)
+  foreach(ranks RANGE 1 4)
+    add_test(NAME Kokkos.NativeParity_${ranks}_ranks
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simulation/integration/kokkos.py
+              $<TARGET_FILE:climate_sim> ${ranks} ${MPIEXEC_NUMPROC_FLAG}
+              ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS})
+    set_tests_properties(Kokkos.NativeParity_${ranks}_ranks PROPERTIES
+      ENVIRONMENT "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+  endforeach()
+endif()

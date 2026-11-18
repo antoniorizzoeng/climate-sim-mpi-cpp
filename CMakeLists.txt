@@ -17,6 +17,17 @@ if(ENABLE_COVERAGE)
     add_link_options(--coverage)
 endif()
 
+option(ENABLE_KOKKOS "Build the optional Kokkos step backend" OFF)
+option(KOKKOS_GPU_AWARE_MPI "Pass packed Kokkos device buffers directly to MPI" OFF)
+if(ENABLE_KOKKOS)
+    include(FetchContent)
+    FetchContent_Declare(kokkos
+        URL https://github.com/kokkos/kokkos/releases/download/4.7.04/kokkos-4.7.04.tar.gz
+        URL_HASH SHA256=4213b248c39e112299fa94ee08817e51126fc02996ed6e2ab56aec4cdb80ee1f
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    FetchContent_MakeAvailable(kokkos)
+endif()
+
 add_subdirectory(src)
 
 set(INSTALL_GTEST OFF CACHE BOOL "Disable installation of googletest" FORCE)

@@ -1,6 +1,7 @@
 add_library(core
     init.cpp
     step.cpp
+    step_loop.cpp
     wind.cpp
     field.cpp
     decomp.cpp
@@ -44,6 +45,18 @@ message(STATUS "Found PnetCDF: include at ${PNETCDF_INCLUDE_DIR}, lib at ${PNETC
 
 target_include_directories(core PUBLIC ${PNETCDF_INCLUDE_DIR})
 target_link_libraries(core PUBLIC ${PNETCDF_LIBRARY})
+
+if(ENABLE_KOKKOS)
+    # Isolate device compilation and Kokkos OpenMP flags from the native stencil.
+    add_library(kokkos_step STATIC kokkos_step.cpp)
+    target_include_directories(kokkos_step PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(kokkos_step PRIVATE Kokkos::kokkos MPI::MPI_CXX)
+    if(KOKKOS_GPU_AWARE_MPI)
+        target_compile_definitions(kokkos_step PRIVATE KOKKOS_GPU_AWARE_MPI)
+    endif()
+    target_link_libraries(core PRIVATE kokkos_step)
+    target_compile_definitions(core PUBLIC CLIMATE_ENABLE_KOKKOS)
+endif()
 
 add_executable(climate_sim main.cpp)
 target_link_libraries(climate_sim PRIVATE core)

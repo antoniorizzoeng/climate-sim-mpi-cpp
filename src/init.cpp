@@ -177,11 +177,13 @@ void ic_gaussian(const Decomposition& dec, Field& u, const SimConfig& cfg) {
 }  // namespace
 
 void initialize_mpi(int& argc, char**& argv) {
-#ifdef _OPENMP
+#if defined(_OPENMP) || defined(CLIMATE_ENABLE_KOKKOS)
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+#ifdef _OPENMP
     if (provided < MPI_THREAD_FUNNELED)
         omp_set_num_threads(1);
+#endif
 #else
     MPI_Init(&argc, &argv);
 #endif

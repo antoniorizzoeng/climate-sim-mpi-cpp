@@ -23,7 +23,7 @@
 #include "init.hpp"
 #include "io.hpp"
 #include "stability.hpp"
-#include "step.hpp"
+#include "step_loop.hpp"
 #include "wind.hpp"
 
 namespace fs = std::filesystem;
@@ -196,7 +196,7 @@ int main(int argc, char** argv) {
         std::optional<WindFile> wind;
         if (file_wind)
             wind.emplace(dec, cfg);
-        Field tmp(dec, u.halo, cfg.dx, cfg.dy, cfg.dz);
+        StepLoop loop(u, dec, cfg);
         if (rank == 0) {
             std::cout << "climate-sim-mpi-cpp \n"
                       << "  grid: " << cfg.nx << " x " << cfg.ny
@@ -234,6 +234,8 @@ int main(int argc, char** argv) {
                 on_root(rank, [&] { progress.write(status); });
         };
         auto snapshot = [&] {
+            if (progress.step > 0)
+                loop.stage_output();
             if (!write_field_netcdf(ncid, varid, u, dec, static_cast<int>(progress.frames))) {
                 throw std::runtime_error("Cannot write snapshot to '" + cfg.output_path +
                                          "' at step " + std::to_string(progress.step));
@@ -250,9 +252,9 @@ int main(int argc, char** argv) {
                 snapshot();
 
             if (wind)
-                advance_field(u, tmp, dec, cfg, wind->sample(progress.step * cfg.dt));
+                loop.advance(wind->sample(progress.step * cfg.dt));
             else
-                advance_field(u, tmp, dec, cfg);
+                loop.advance();
             ++progress.step;
             sum_step += MPI_Wtime() - ts;
         }

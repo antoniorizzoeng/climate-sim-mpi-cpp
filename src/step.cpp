@@ -6,42 +6,26 @@
 #include "advection.hpp"
 #include "diffusion.hpp"
 #include "halo.hpp"
+#include "stencil_math.hpp"
 
 namespace {
-struct Weights {
-    double low, high;
-};
-
-inline Weights upwind(double diffusion, double courant) {
-    return {diffusion + std::max(courant, 0.0), diffusion - std::min(courant, 0.0)};
-}
-
-inline double difference(const double* cell, std::ptrdiff_t stride, Weights w) {
-    return w.low * (cell[-stride] - *cell) + w.high * (cell[stride] - *cell);
-}
+using namespace stencil_math;
 
 inline double velocity(const std::vector<double>& lo,
                        const std::vector<double>& hi,
                        size_t i,
                        double a) {
-    return lo[i] == hi[i] ? lo[i] : (1.0 - a) * lo[i] + a * hi[i];
+    return interpolate(lo[i], hi[i], a);
 }
 
 // The compiler emits separate five- and seven-point loops. File velocities
 // are indexed by the unpadded tile offset; scalar neighbors by padded strides.
 template <bool volume, bool file>
 void stencil(Field& u, Field& scratch, const SimConfig& cfg, const WindSample* wind) {
-    auto diffusion = [&](double D, double spacing) {
-        const double numerator = cfg.dt * D, square = spacing * spacing;
-        if constexpr (file || volume) {
-            if (!std::isnormal(square) || (D != 0 && !std::isnormal(numerator)))
-                return static_cast<double>((static_cast<long double>(cfg.dt) * D / spacing) /
-                                           spacing);
-        }
-        return numerator / square;
-    };
-    const double diff_x = diffusion(cfg.D, u.dx), diff_y = diffusion(cfg.D, u.dy);
-    const double diff_z = volume ? diffusion(cfg.vertical_diffusion(), u.dz) : 0.0;
+    constexpr bool robust = file || volume;
+    const double diff_x = diffusion<robust>(cfg.dt, cfg.D, u.dx);
+    const double diff_y = diffusion<robust>(cfg.dt, cfg.D, u.dy);
+    const double diff_z = volume ? diffusion<true>(cfg.dt, cfg.vertical_diffusion(), u.dz) : 0.0;
     const Weights uniform_x = upwind(diff_x, cfg.dt * cfg.vx / u.dx);
     const Weights uniform_y = upwind(diff_y, cfg.dt * cfg.vy / u.dy);
     const Weights uniform_z = volume ? upwind(diff_z, cfg.dt * cfg.vz / u.dz) : Weights{};
