@@ -79,7 +79,7 @@ wind:
   interval: 2
 ```
 
-Both component variables must use the same dimensions, either `(y, x)` for
+On a 2D grid both component variables use the same dimensions, either `(y, x)` for
 steady wind or `(time, y, x)` for a series. The named spatial dimensions must
 match the simulation grid, including a grid inferred from the initial condition.
 Supply finite numeric, cell-centred velocities in grid-length units per second
@@ -115,7 +115,7 @@ The equivalent YAML keys are `output.path` and `output.progress`. CLI values
 override the YAML settings. Relative paths resolve from the working directory.
 The existing `output.prefix` setting is stored in the `output_prefix` metadata.
 
-The `u` variable stores frames in `(time, y, x)` order. Frame 0 is the initial
+The `u` variable stores 2D frames in `(time, y, x)` order and volumes in `(time, z, y, x)` order. Frame 0 is the initial
 field. The remaining frames are the states after every `out_every` steps and
 after the last step, which appears exactly once. To recover the simulation step
 for zero-based frame index `i`, use `min(i * out_every, steps)`. Multiply it by
@@ -150,12 +150,80 @@ mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=file-ic.yaml
 ```
 
 You can also set these options with `--ic.mode=file`, `--ic.path`, and `--ic.var`.
-The variable defaults to `u` and must be a two-dimensional float or double field
-in `(y, x)` order. Omitted `nx` and `ny` values come from the file. Explicit
+For a 2D run the variable defaults to `u` and contains a float or double field in `(y, x)` order. Omitted `nx` and `ny` values come from the file. Explicit
 values must match it. Snapshot 0 in `outputs/snapshots.nc` contains the input field.
 
 PnetCDF supports CDF-1, CDF-2, and CDF-5. Convert NetCDF-4/HDF5 inputs with
 `nccopy -k cdf5 input.nc output.nc`.
+
+## 3D simulation
+
+Save the following configuration as `volume.yaml`. It transports a Gaussian
+hotspot horizontally and vertically, wraps at the horizontal edges, and applies
+zero normal gradient at the front (`z = 0`) and back (`z = nz - 1`) faces.
+
+```yaml
+grid: {nx: 64, ny: 48, nz: 24, dx: 1.0, dy: 1.0, dz: 0.5}
+physics: {D: 0.05, Dz: 0.01, vx: 0.5, vy: -0.25, vz: 0.125}
+time: {dt: 0.1, steps: 40, out_every: 10}
+bc: {left: periodic, right: periodic, bottom: periodic, top: periodic,
+     front: neumann, back: neumann}
+ic: {preset: gaussian_hotspot, sigma_frac: 0.12, zc_frac: 0.4}
+output: {path: runs/volume/snapshots.nc, progress: runs/volume/progress.json}
+```
+
+```bash
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=volume.yaml
+```
+
+`nz` and `dz` default to 1, `vz` defaults to zero, and `Dz` defaults to the
+effective horizontal diffusivity `D`, including CLI overrides. Use `--nz`,
+`--dz`, `--vz`, `--Dz`, `--bc.front`, and `--bc.back` to override the
+corresponding values. Periodic front and back faces must be paired.
+Uniform 3D wind clamps the timestep to
+
+```text
+1 / (|vx|/dx + |vy|/dy + |vz|/dz + 2*(D/dx² + D/dy² + Dz/dz²))
+```
+
+File wind uses the maximum absolute value of each component across all cells
+and records and rejects a timestep above the combined limit. A zero denominator
+allows any finite timestep. Single-layer runs use the original 2D stability
+rules and snapshot metadata. Volumes pin each singleton axis to one MPI
+partition. Single-layer runs retain the legacy horizontal rank layout, including
+empty tiles when a horizontal extent is smaller than the process grid.
+
+To run the same grid with generated initial conditions and time-varying winds:
+
+```bash
+python scripts/generate_ic.py --nx 64 --ny 48 --nz 24 --dz 0.5 --zc-frac 0.4 --sigma-frac 0.12 --outfile inputs/start3d.nc
+python scripts/generate_wind.py --nx 64 --ny 48 --nz 24 --records 3 --interval 2 --outfile inputs/wind3d.nc
+mpirun --oversubscribe -np 4 ./build/src/climate_sim --config=volume.yaml \
+  --ic.mode=file --ic.path=inputs/start3d.nc --wind.mode=file \
+  --wind.path=inputs/wind3d.nc --wind.interval=2 --wind.vz_var=vz
+```
+
+A 3D initial condition uses a float or double variable with dimensions
+`(z, y, x)`. The engine infers omitted grid extents from the variable and
+checks explicit extents. To start every layer from the same 2D field, specify
+the desired `nz` and set `ic.replicate_z: true` or `--ic.replicate_z=true`.
+
+File-wind components use `(z, y, x)` for a steady wind and `(time, z, y, x)`
+for time records. Set `wind.vz_var` to read vertical velocities. Omitting it
+gives zero vertical wind. The generator writes all three components for
+`--nz` greater than one.
+
+Snapshots include the layer count (`nz`), spacing (`dz`), vertical diffusivity
+(`Dz`), and the two z boundary conditions. To read a horizontal slice using
+the existing Python dependencies:
+
+```python
+from netCDF4 import Dataset
+
+with Dataset("runs/volume/snapshots.nc") as nc:
+    middle = len(nc.dimensions["z"]) // 2
+    final_slice = nc["u"][-1, middle, :, :]
+```
 
 ## Visualize
 

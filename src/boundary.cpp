@@ -2,55 +2,43 @@
 
 #include <algorithm>
 
-static inline void fill_col(Field& f, int i, int j0, int j1, double v) {
-    double* col = &f.at(i, j0);
-    const size_t pitch = f.nx_total();
-    for (int j = 0; j <= j1 - j0; ++j) col[j * pitch] = v;
-}
-static inline void fill_row(Field& f, int j, int i0, int i1, double v) {
-    std::fill_n(&f.at(i0, j), i1 - i0 + 1, v);
-}
-
-void apply_boundary(Field& f, const Decomp2D& dec, const BCConfig& bc, double value = 0.0) {
-    const int h = f.halo;
-    const int nx = f.nx_local;
-    const int ny = f.ny_local;
-    const int iL = 0;
-    const int iR = h + nx;
-    const int jB = 0;
-    const int jT = h + ny;
-    const int i0 = 0;
-    const int i1 = f.nx_total() - 1;
-
-    if (dec.nbr_lr[0] == MPI_PROC_NULL) {
-        if (bc.left == BCType::Dirichlet) {
-            fill_col(f, iL, jB, jT, value);
-        } else if (bc.left == BCType::Neumann) {
-            for (int j = jB; j <= jT; ++j) f.at(iL, j) = f.at(h, j);
+void apply_boundary(Field& f, const Decomposition& dec, const BCConfig& bc, double value) {
+    const int pitch = f.nx_total(), h = f.halo;
+    const size_t plane = f.plane_size();
+    auto fill_face = [&](double* ghost, const double* inside, size_t count, BCType type) {
+        if (type == BCType::Dirichlet)
+            std::fill_n(ghost, count, value);
+        else if (type == BCType::Neumann)
+            std::copy_n(inside, count, ghost);
+    };
+    for (int k = f.z_halo; k < f.z_halo + f.nz_local; ++k) {
+        double* slice = f.data.data() + k * plane;
+        auto column = [&](int i, int interior, BCType type) {
+            for (int j = 0; j < f.ny_total(); ++j) {
+                double* row = slice + static_cast<size_t>(j) * pitch;
+                if (type == BCType::Dirichlet)
+                    row[i] = value;
+                else if (type == BCType::Neumann)
+                    row[i] = row[interior];
+            }
+        };
+        if (dec.nbr_lr[0] == MPI_PROC_NULL)
+            column(0, h, bc.left);
+        if (dec.nbr_lr[1] == MPI_PROC_NULL)
+            column(h + f.nx_local, h + f.nx_local - 1, bc.right);
+        if (dec.nbr_du[0] == MPI_PROC_NULL)
+            fill_face(slice, slice + h * pitch, pitch, bc.bottom);
+        if (dec.nbr_du[1] == MPI_PROC_NULL) {
+            double* top = slice + static_cast<size_t>(h + f.ny_local) * pitch;
+            fill_face(top, top - pitch, pitch, bc.top);
         }
     }
-
-    if (dec.nbr_lr[1] == MPI_PROC_NULL) {
-        if (bc.right == BCType::Dirichlet) {
-            fill_col(f, iR, jB, jT, value);
-        } else if (bc.right == BCType::Neumann) {
-            for (int j = jB; j <= jT; ++j) f.at(iR, j) = f.at(h + nx - 1, j);
-        }
-    }
-
-    if (dec.nbr_du[0] == MPI_PROC_NULL) {
-        if (bc.bottom == BCType::Dirichlet) {
-            fill_row(f, jB, i0, i1, value);
-        } else if (bc.bottom == BCType::Neumann) {
-            std::copy_n(&f.at(i0, h), f.nx_total(), &f.at(i0, jB));
-        }
-    }
-
-    if (dec.nbr_du[1] == MPI_PROC_NULL) {
-        if (bc.top == BCType::Dirichlet) {
-            fill_row(f, jT, i0, i1, value);
-        } else if (bc.top == BCType::Neumann) {
-            std::copy_n(&f.at(i0, h + ny - 1), f.nx_total(), &f.at(i0, jT));
+    if (f.z_halo && f.nz_local) {
+        if (dec.nbr_fb[0] == MPI_PROC_NULL)
+            fill_face(f.data.data(), f.data.data() + plane, plane, bc.front);
+        if (dec.nbr_fb[1] == MPI_PROC_NULL) {
+            double* back = f.data.data() + (h + f.nz_local) * plane;
+            fill_face(back, back - plane, plane, bc.back);
         }
     }
 }

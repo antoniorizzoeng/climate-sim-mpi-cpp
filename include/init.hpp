@@ -5,6 +5,6 @@
 
 void initialize_mpi(int& argc, char**& argv);
 
-void apply_initial_condition(const Decomp2D& dec, Field& u, const SimConfig& cfg);
+void apply_initial_condition(const Decomposition& dec, Field& u, const SimConfig& cfg);
 
-Field initialize_field(MPI_Comm comm, Decomp2D& dec, SimConfig& cfg);
+Field initialize_field(MPI_Comm comm, Decomposition& dec, SimConfig& cfg);

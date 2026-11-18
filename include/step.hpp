@@ -5,10 +5,10 @@
 // Advance one step and swap storage. Both fields need the same one-cell halo
 // layout and initial physical ghost values. Threaded callers use initialize_mpi
 // or provide MPI_THREAD_FUNNELED support for multiple OpenMP threads.
-void advance_field(Field& u, Field& scratch, const Decomp2D& dec, const SimConfig& cfg);
+void advance_field(Field& u, Field& scratch, const Decomposition& dec, const SimConfig& cfg);
 
 struct WindTile {
-    std::vector<double> vx, vy;
+    std::vector<double> vx, vy, vz;
 };
 
 // Row-major tile interiors. Both records use the scalar field's decomposition.
@@ -19,4 +19,4 @@ struct WindSample {
 };
 
 void advance_field(
-    Field& u, Field& scratch, const Decomp2D& dec, const SimConfig& cfg, WindSample wind);
+    Field& u, Field& scratch, const Decomposition& dec, const SimConfig& cfg, WindSample wind);

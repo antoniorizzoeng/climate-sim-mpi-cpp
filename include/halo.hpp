@@ -4,4 +4,4 @@
 #include "decomp.hpp"
 #include "field.hpp"
 
-void exchange_halos(Field& f, const Decomp2D& dec, MPI_Comm comm);
+void exchange_halos(Field& f, const Decomposition& dec, MPI_Comm comm);
