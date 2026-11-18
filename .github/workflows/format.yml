@@ -15,9 +15,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install clang-format
+        timeout-minutes: 8
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-15
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y clang-format-15
           ln -s /usr/bin/clang-format-15 $HOME/clang-format
 
       - name: Show clang-format version

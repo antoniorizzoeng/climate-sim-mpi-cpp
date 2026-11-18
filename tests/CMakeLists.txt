@@ -102,6 +102,14 @@ target_link_libraries(test_advection PRIVATE core GTest::gtest GTest::gtest_main
 gtest_discover_tests(test_advection DISCOVERY_TIMEOUT 30)
 
 
+add_executable(test_step_mpi simulation/unit/test_step_mpi.cpp)
+target_link_libraries(test_step_mpi PRIVATE core GTest::gtest)
+foreach(ranks RANGE 1 4)
+  add_test(NAME Unit_Step.Reference_${ranks}_ranks
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${MPIEXEC_NUMPROC_FLAG} ${ranks}
+            $<TARGET_FILE:test_step_mpi>)
+endforeach()
+
 # ------------------------------
 # Integration tests
 # ------------------------------

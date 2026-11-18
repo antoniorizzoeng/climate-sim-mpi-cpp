@@ -17,15 +17,13 @@
 #include <utility>
 #include <vector>
 
-#include "advection.hpp"
 #include "boundary.hpp"
 #include "decomp.hpp"
-#include "diffusion.hpp"
 #include "field.hpp"
-#include "halo.hpp"
 #include "init.hpp"
 #include "io.hpp"
 #include "stability.hpp"
+#include "step.hpp"
 
 namespace fs = std::filesystem;
 
@@ -119,7 +117,7 @@ void log_error(std::string message) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    MPI_Init(&argc, &argv);
+    initialize_mpi(argc, argv);
 
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -208,12 +206,7 @@ int main(int argc, char** argv) {
             if (progress.step % cfg.out_every == 0)
                 snapshot();
 
-            exchange_halos(u, dec, MPI_COMM_WORLD);
-            apply_boundary(u, dec, cfg.bc, 0.0);
-            std::copy(u.data.begin(), u.data.end(), tmp.data.begin());
-            diffusion_step(u, tmp, cfg.D, cfg.dt);
-            advection_step(u, tmp, cfg.vx, cfg.vy, cfg.dt);
-            std::swap(u.data, tmp.data);
+            advance_field(u, tmp, dec, cfg);
             ++progress.step;
             sum_step += MPI_Wtime() - ts;
         }
