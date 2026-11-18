@@ -87,6 +87,41 @@ Install dependencies with:
 pip install -r requirements.txt
 ```
 
+## GPU builds
+
+The native MPI solver is the default (`--backend=cpu`). Configure with
+`ENABLE_KOKKOS=ON` to fetch Kokkos 4.7.04 and select its solver at run time
+with `--backend=kokkos`. Use CMake 3.24+ and the architecture of your GPU.
+These examples target an NVIDIA A100 or AMD MI250X.
+
+```bash
+# CUDA toolkit with nvcc on PATH
+cmake -S . -B build/cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_AMPERE80=ON
+cmake --build build/cuda --target climate_sim
+mpirun -np 4 build/cuda/src/climate_sim --backend=kokkos --config=configs/dev.yaml
+
+# ROCm with hipcc on PATH
+cmake -S . -B build/hip -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+  -DCMAKE_CXX_COMPILER=hipcc -DENABLE_KOKKOS=ON -DKokkos_ENABLE_HIP=ON -DKokkos_ARCH_AMD_GFX90A=ON
+cmake --build build/hip --target climate_sim
+mpirun -np 4 build/hip/src/climate_sim --backend=kokkos --config=configs/dev.yaml
+
+# CPU testing with the same kernels and the Python test dependencies installed
+cmake -S . -B build/kopenmp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_OPENMP=ON
+cmake --build build/kopenmp
+ctest --test-dir build/kopenmp -R Kokkos --output-on-failure
+cmake -S . -B build/kserial -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_OPENMP=OFF
+cmake --build build/kserial
+ctest --test-dir build/kserial -R Kokkos --output-on-failure
+```
+
+Launch one rank per GPU. MPI stages packed halo faces on the host by default.
+For an MPI installation that supports your device pointers, add
+`-DKOKKOS_GPU_AWARE_MPI=ON` at configure time. [Device mapping and I/O](docs/getting_started.md#gpu-builds) · [CPU benchmark results](docs/performance.md#kokkos-backend)
+
 ---
 
 ## Visualization Usage

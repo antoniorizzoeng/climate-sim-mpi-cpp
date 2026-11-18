@@ -20,6 +20,59 @@ The CSV reports median milliseconds per step and global cell updates per second.
 - **Compute** times the production step, including halo exchange, physical boundaries and the buffer swap. The driver synchronizes ranks before starting its clock and reports maximum rank elapsed time.
 - **With output** uses the simulator’s `total_max`. It includes the steps, three collective snapshots at step 0, midpoint and end, and closing the file. Both modes exclude process startup, initial conditions and file creation. Progress reporting was disabled. One update is one global interior cell advanced by one step.
 
+## Kokkos backend
+
+Compute-only measurements on an AMD Ryzen 5 8500G (6 cores, 12 hardware threads)
+with GCC 13.3, Open MPI 4.1.6 and Kokkos 4.7.04. Each entry is **million cell
+updates/s** with **ms/step** in parentheses. Each case used 32 uniform-wind
+steps, Dirichlet faces and five fresh MPI jobs. The harness rotated build order
+and took the median of the slowest rank's elapsed time per job. Allocation,
+initialization and snapshot I/O are outside the interval. The timed interval
+includes the final device fence and, on two ranks, the halo exchange.
+
+| Grid | MPI ranks | Native CPU, OpenMP off | Native CPU, OpenMP on | Kokkos OpenMP |
+|---|---:|---:|---:|---:|
+| 2048² | 1 | 199.3 (21.043) | 500.8 (8.376) | 448.2 (9.358) |
+| 2048² | 2 | 352.6 (11.896) | 486.5 (8.621) | 509.2 (8.237) |
+| 256³ | 1 | 129.9 (129.114) | 355.2 (47.230) | 355.7 (47.170) |
+| 256³ | 2 | 241.6 (69.447) | 483.4 (34.706) | 338.7 (49.532) |
+
+Both threaded builds used six threads on one rank or three threads per rank
+on two ranks. All three builds used Release flags and the portable instruction
+set. Host staging was enabled for Kokkos MPI. **GPU throughput was not measured.**
+
+```bash
+cmake -S . -B build/default -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake -S . -B build/native-omp -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DENABLE_OPENMP=ON
+cmake -S . -B build/kopenmp -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_OPENMP=ON
+for dir in build/default build/native-omp build/kopenmp; do
+  cmake --build "$dir" --target step_loop_bench
+done
+export OMP_PLACES=cores OMP_PROC_BIND=spread
+export OMPI_MCA_btl=self,tcp OMPI_MCA_btl_tcp_if_include=lo OMPI_MCA_mpi_yield_when_idle=1
+bench=(python3 benchmarks/step_loop.py --build build/default build/native-omp build/kopenmp
+       --backends cpu cpu kokkos --modes compute --steps 32 --grids 2048 256x256x256 --repeats 5)
+OMP_NUM_THREADS=6 "${bench[@]}" --ranks 1 --launcher 'mpirun --bind-to none'
+OMP_NUM_THREADS=3 "${bench[@]}" --ranks 2 \
+  --launcher 'mpirun --map-by slot:PE=3 --bind-to core --mca hwloc_base_mem_bind_failure_action silent'
+```
+
+The Kokkos parity tests compare every output frame with the native solver for
+uniform and time-varying file wind, Dirichlet, Neumann, periodic and mixed
+faces, and 1–4 ranks. Cases include uneven tiles, distributed z faces, missing
+vertical file wind and the final off-cadence frame. Each CPU execution space
+passed 121 comparisons, with maximum absolute error 2.22e−16. OpenMP used
+host staging and Serial exercised the direct-pointer MPI branch on host memory.
+Across 48 runs, the default Release build also produced byte-identical NetCDF
+and progress files to the pre-change executable (`a774e0f`).
+
+The default coverage build measured 95.33% line coverage. It compiles the native
+solver and omits the optional Kokkos translation unit, so gcovr needs no
+additional exclusions. CUDA Ampere compilation and linking passed locally
+with both MPI buffer modes. HIP and GPU execution require separate validation
+on hardware.
+
 ## 3D scaling and 2D compatibility (issue #59)
 
 The portable Release build ran on the Ryzen 5 8500G host described below,

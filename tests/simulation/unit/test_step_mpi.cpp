@@ -151,9 +151,10 @@ TEST(Unit_Step, EmptyPresetTileRelaysThePreviousGhost) {
     advance_field(u, scratch, dec, cfg);
     // The two-rank grid sees left ghosts 0 then 1, giving 0.9 then 0.91.
     // An unpaired rank has two physical Neumann faces and stays constant.
-    if (dec.nx_local == 1)
+    if (dec.nx_local == 1) {
         for (int j = 1; j <= dec.ny_local; ++j)
             EXPECT_NEAR(u.at(1, j), dec.dims[0] == 2 ? 0.91 : 1.0, 1e-14);
+    }
     dec.finalize();
     MPI_Comm_free(&pair);
 }

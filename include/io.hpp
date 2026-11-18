@@ -27,6 +27,7 @@ struct WindConfig {
 };
 
 struct SimConfig {
+    std::string backend = "cpu";
     int nx = 256, ny = 256, nz = 1;
     bool nx_explicit = false, ny_explicit = false, nz_explicit = false;
     double dx = 1.0, dy = 1.0, dz = 1.0;
@@ -53,6 +54,7 @@ struct SimConfig {
 };
 
 struct CLIOverrides {
+    std::optional<std::string> backend;
     std::optional<int> nx, ny, nz;
     std::optional<double> dx, dy, dz;
 

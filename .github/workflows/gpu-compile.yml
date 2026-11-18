@@ -1,0 +1,32 @@
+name: GPU compile
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cuda:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: nvidia/cuda:12.9.2-devel-ubuntu24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates cmake ninja-build g++ libopenmpi-dev libpnetcdf-dev libyaml-cpp-dev
+      - name: Compile for NVIDIA Ampere
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DENABLE_KOKKOS=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_AMPERE80=ON
+          cmake --build build --target climate_sim --parallel 2
+      - name: Compile the GPU-aware MPI variant
+        run: |
+          cmake -S . -B build -DKOKKOS_GPU_AWARE_MPI=ON
+          cmake --build build --target climate_sim --parallel 2

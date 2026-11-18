@@ -122,8 +122,8 @@ WindSample WindFile::sample(double time) {
     if (index != lower_.index)
         read(index, lower_);
     if (index == last || position == static_cast<double>(index))
-        return {lower_.tile, lower_.tile, 0};
+        return {lower_.tile, lower_.tile, 0, index, index};
     if (index + 1 != upper_.index)
         read(index + 1, upper_);
-    return {lower_.tile, upper_.tile, position - static_cast<double>(index)};
+    return {lower_.tile, upper_.tile, position - static_cast<double>(index), index, index + 1};
 }

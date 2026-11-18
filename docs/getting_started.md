@@ -21,6 +21,67 @@ cmake -S . -B build -G Ninja -DMPI_TEST_PROCS=4
 cmake --build build --parallel
 ```
 
+## GPU builds
+
+A standard build uses the native CPU step and skips the Kokkos download. For a
+Kokkos build, install CMake 3.24+, Ninja, MPI, PnetCDF and yaml-cpp development
+packages. CMake fetches the pinned 4.7.04 release. Select one of the configurations
+below, using a separate build directory for each execution space.
+
+**CUDA.** Put the CUDA toolkit's `nvcc` on `PATH`. This example compiles for
+an A100 even on a build node without a GPU. Set the architecture to match the
+compute node.
+
+```bash
+cmake -S . -B build/cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_AMPERE80=ON
+cmake --build build/cuda --target climate_sim
+mpirun -np 4 build/cuda/src/climate_sim --backend=kokkos --config=configs/dev.yaml
+```
+
+**HIP.** Load ROCm and put `hipcc` on `PATH`. This example targets the MI250X
+(`gfx90a`). Choose the Kokkos architecture that corresponds to the device
+reported by `rocminfo`. [Kokkos configuration guide](https://kokkos.org/kokkos-core-wiki/get-started/configuration-guide.html)
+
+```bash
+cmake -S . -B build/hip -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+  -DCMAKE_CXX_COMPILER=hipcc -DENABLE_KOKKOS=ON -DKokkos_ENABLE_HIP=ON -DKokkos_ARCH_AMD_GFX90A=ON
+cmake --build build/hip --target climate_sim
+mpirun -np 4 build/hip/src/climate_sim --backend=kokkos --config=configs/dev.yaml
+```
+
+Request one MPI rank per GPU from the scheduler. Each rank selects its
+node-local MPI rank modulo the number of GPUs visible to that process. If
+the scheduler exposes one GPU per rank, each rank selects visible device 0.
+Running the same binary with `--backend=cpu`, or omitting the flag, selects
+the native step.
+
+Both scalar buffers stay on the device. MPI exchanges packed faces through
+host buffers by default. On a system with CUDA-aware or ROCm-aware MPI, add
+`-DKOKKOS_GPU_AWARE_MPI=ON` to the initial configure command to pass the
+packed device pointers directly. PnetCDF reads the initial conditions and
+wind tiles on the host. Each new wind record uploads once as it enters the
+interpolation window. The initial frame uses the host initial condition.
+Subsequent output steps and the final frame copy the field back for PnetCDF.
+
+**CPU testing.** Install NetCDF-C and the Python test dependencies, then run
+the same Kokkos kernels on OpenMP or Serial. The parity tests launch the
+simulator through MPI and compare its snapshot frames with `--backend=cpu`.
+
+```bash
+python -m pip install -r requirements.txt
+cmake -S . -B build/kopenmp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_OPENMP=ON
+cmake --build build/kopenmp
+ctest --test-dir build/kopenmp --output-on-failure
+OMP_NUM_THREADS=2 mpirun -np 2 build/kopenmp/src/climate_sim --backend=kokkos --config=configs/dev.yaml
+
+cmake -S . -B build/kserial -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_KOKKOS=ON -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_OPENMP=OFF
+cmake --build build/kserial
+ctest --test-dir build/kserial -R Kokkos --output-on-failure
+```
+
 ## Run a demo
 
 ```bash
